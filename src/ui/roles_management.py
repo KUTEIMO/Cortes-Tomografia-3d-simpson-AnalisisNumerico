@@ -11,16 +11,18 @@ from src.database.db_manager import PatientDatabaseManager
 def render_roles_and_audit(
     db: PatientDatabaseManager,
     current_user_id: str,
-    on_change_user: Callable[[str], None]
+    on_change_user: Callable[[str], None],
+    embedded: bool = False
 ):
     """Renderiza la interfaz de gestion de roles y bitacora de auditoria."""
-    st.markdown("""
-    <div class="page-header">
-        <div class="page-eyebrow">Seguridad Institucional</div>
-        <h1 class="page-title">Control de Acceso y Auditoria</h1>
-        <p class="page-subtitle">Gestion de perfiles facultativos, matriz de privilegios y registro inmutable de operaciones.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    if not embedded:
+        st.markdown("""
+        <div class="page-header-wrap">
+            <div class="page-eyebrow">Seguridad Institucional</div>
+            <h1 class="page-title">Control de acceso y auditoria</h1>
+            <p class="page-subtitle">Gestion de perfiles facultativos, matriz de privilegios y registro inmutable de operaciones.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
     users = db.list_users()
     active_user = db.get_user(current_user_id) or users[0]
@@ -31,13 +33,13 @@ def render_roles_and_audit(
 
         with col_u1:
             st.markdown(f"""
-            <div style="font-size: 0.72rem; font-weight: 700; color: #2563EB; text-transform: uppercase; letter-spacing: 0.05em;">Facultativo en Sesion</div>
-            <div style="font-size: 1.15rem; font-weight: 700; color: #101828; margin-top: 2px;">{active_user['full_name']}</div>
-            <div style="font-size: 0.82rem; color: #475467; margin-top: 2px;">
-                <strong>Rol:</strong> {active_user['role']} &nbsp;|&nbsp; <strong>Unidad:</strong> {active_user['hospital_unit']}
+            <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">Facultativo en sesion</div>
+            <div style="font-size: 1.15rem; font-weight: 700; color: #0F172A; margin-top: 2px;">{active_user['full_name']}</div>
+            <div style="font-size: 0.84rem; color: #475469; margin-top: 2px;">
+                <strong>Rol:</strong> {active_user['role']} &nbsp;&middot;&nbsp; <strong>Unidad:</strong> {active_user['hospital_unit']}
             </div>
             <div style="margin-top: 8px;">
-                {' '.join([f'<span class=\"clinical-card-badge badge-stable\" style=\"margin-right: 4px;\">{p}</span>' for p in active_user['permissions']])}
+                {' '.join([f'<span class=\"status-pill pill-stable\" style=\"margin-right: 4px;\">{p}</span>' for p in active_user['permissions']])}
             </div>
             """, unsafe_allow_html=True)
 
@@ -77,7 +79,7 @@ def render_roles_and_audit(
                     "Exportacion": "SI" if "EXPORT" in perms else "NO",
                     "Administracion": "SI" if "ADMIN" in perms else "NO"
                 })
-            st.dataframe(pd.DataFrame(matrix_rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(matrix_rows), width="stretch", hide_index=True)
 
     with tab_trail:
         with st.container(border=True):
@@ -97,6 +99,6 @@ def render_roles_and_audit(
                 })
 
             if log_rows:
-                st.dataframe(pd.DataFrame(log_rows), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(log_rows), width="stretch", hide_index=True)
             else:
                 st.markdown("<div style='color: #667085;'>No hay registros disponibles.</div>", unsafe_allow_html=True)

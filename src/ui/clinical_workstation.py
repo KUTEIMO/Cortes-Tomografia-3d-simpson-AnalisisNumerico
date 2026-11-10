@@ -72,13 +72,17 @@ def render_clinical_workstation(
     # NIVEL 1: ALERTA CLINICA DE EFECTO DE MASA
     # =========================================================================
     risk_title, risk_desc, risk_badge = get_clinical_risk_assessment(res_simpson.volume_cm3)
+    alert_bg = "#FEF2F2" if risk_badge == "critical" else "#FFFBEB" if risk_badge == "warning" else "#ECFDF5"
+    alert_bd = "#FECACA" if risk_badge == "critical" else "#FDE68A" if risk_badge == "warning" else "#A7F3D0"
+    alert_accent = "#DC2626" if risk_badge == "critical" else "#D97706" if risk_badge == "warning" else "#059669"
+    pill_cls = "pill-critical" if risk_badge == "critical" else "pill-warning" if risk_badge == "warning" else "pill-stable"
     st.markdown(f"""
-    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: #FFFFFF; border: 1px solid #EAECF0; border-left: 3px solid #2563EB; border-radius: 8px; margin-bottom: 12px;">
-        <div style="font-size: 0.82rem;">
-            <strong style="color: #101828; text-transform: uppercase; font-size: 0.74rem; letter-spacing: 0.04em;">Efecto de Masa:</strong>
-            <span style="color: #344054; margin-left: 6px;">{risk_title} &mdash; {risk_desc}</span>
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: {alert_bg}; border: 1px solid {alert_bd}; border-left: 4px solid {alert_accent}; border-radius: 8px; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+        <div style="font-size: 0.86rem;">
+            <strong style="color: #0F172A; font-size: 0.80rem; text-transform: uppercase; letter-spacing: 0.04em;">Estado clinico:</strong>
+            <span style="color: #334155; margin-left: 6px;">{risk_title} &mdash; {risk_desc}</span>
         </div>
-        <span class="clinical-card-badge badge-{risk_badge}" style="margin: 0; white-space: nowrap;">ESTADIFICACION VOLUMETRICA</span>
+        <span class="status-pill {pill_cls}">Estadificacion volumetrica</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -112,15 +116,15 @@ def render_clinical_workstation(
 
         col_t1, col_t2, col_t3, col_t4, col_t5, col_sp, col_lp = st.columns([0.9, 0.9, 2.2, 0.9, 0.9, 2.0, 1.1])
         with col_t1:
-            st.button("Inicio", key="pacs_start", on_click=pacs_nav_set, args=(1,), use_container_width=True)
+            st.button("Inicio", key="pacs_start", on_click=pacs_nav_set, args=(1,), width="stretch")
         with col_t2:
-            st.button("Anterior", key="pacs_prev", on_click=pacs_nav_set, args=(st.session_state.axial_slice_slider - 1,), use_container_width=True)
+            st.button("Anterior", key="pacs_prev", on_click=pacs_nav_set, args=(st.session_state.axial_slice_slider - 1,), width="stretch")
         with col_t3:
-            run_cine = st.button("Reproducir Cine-Loop", key="pacs_play", type="primary", use_container_width=True)
+            run_cine = st.button("Reproducir Cine-Loop", key="pacs_play", type="primary", width="stretch")
         with col_t4:
-            st.button("Siguiente", key="pacs_next", on_click=pacs_nav_set, args=(st.session_state.axial_slice_slider + 1,), use_container_width=True)
+            st.button("Siguiente", key="pacs_next", on_click=pacs_nav_set, args=(st.session_state.axial_slice_slider + 1,), width="stretch")
         with col_t5:
-            st.button("Final", key="pacs_end", on_click=pacs_nav_set, args=(total_active_slices,), use_container_width=True)
+            st.button("Final", key="pacs_end", on_click=pacs_nav_set, args=(total_active_slices,), width="stretch")
         with col_sp:
             cine_speed_opt = st.selectbox(
                 "Cadencia",
@@ -208,7 +212,7 @@ def render_clinical_workstation(
             lesion_color="#2563EB",
             view_mode=view_mode
         )
-        placeholder_3d.plotly_chart(fig_3d, use_container_width=True, key=f"p3d_{idx}_{time.time_ns()}")
+        placeholder_3d.plotly_chart(fig_3d, width="stretch", key=f"p3d_{idx}_{time.time_ns()}")
 
         if annotated_slices:
             if view_mode == "Resonancia Pura (FLAIR)" and raw_slices:
@@ -251,7 +255,7 @@ def render_clinical_workstation(
                 fp_mm2=fp_val,
                 view_mode=view_mode
             )
-            placeholder_2d.plotly_chart(fig_2d, use_container_width=True, key=f"p2d_{idx}_{time.time_ns()}")
+            placeholder_2d.plotly_chart(fig_2d, width="stretch", key=f"p2d_{idx}_{time.time_ns()}")
 
             if view_mode in ["Auditoria Dual: Clinico vs IA", "Vision Artificial Refinada (Esmeralda)"] and cur_area > 0:
                 diff_mm2 = cv_area - cur_area
@@ -316,7 +320,7 @@ def render_clinical_workstation(
     with tab_profile:
         with st.container(border=True):
             fig_2d = create_2d_area_profile(z_coords, areas, res_simpson.method_used)
-            st.plotly_chart(fig_2d, use_container_width=True)
+            st.plotly_chart(fig_2d, width="stretch")
 
     with tab_telemetry:
         with st.container(border=True):
@@ -335,7 +339,7 @@ def render_clinical_workstation(
                     "CRC32": hex(p.crc32_checksum),
                     "Estado": "OK" if p.verify_integrity() else "ERROR"
                 })
-            st.dataframe(pd.DataFrame(table_data), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(table_data), width="stretch", hide_index=True)
 
     with tab_report:
         with st.container(border=True):

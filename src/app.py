@@ -114,7 +114,7 @@ if not st.session_state.is_presentation_authenticated:
                 placeholder="Clave de acceso institucional",
                 label_visibility="collapsed"
             )
-            submitted = st.form_submit_button("Ingresar", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("Ingresar", type="primary", width="stretch")
 
             if submitted:
                 if _verify_access_key(entered_key):
@@ -202,71 +202,68 @@ p_options = {p["patient_id"]: f"{p['patient_code']} - {p['pathology'][:26]}" for
 active_user_data = db.get_user(st.session_state.current_user_id) or db.list_users()[0]
 
 # =============================================================================
-# 4. BARRA DE NAVEGACION SUPERIOR (TOP NAVBAR PRINCIPAL)
+# 4. ENCABEZADO INSTITUCIONAL Y NAVEGACION PRINCIPAL (4 RUTAS)
 # =============================================================================
-st.markdown(f"""
-<div style="background: #FFFFFF; border: 1px solid #EAECF0; border-radius: 8px; padding: 10px 18px; margin-bottom: 10px;">
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 1.15rem; font-weight: 700; color: #101828; letter-spacing: -0.02em;">NEURO-CALC</span>
-            <span style="font-size: 0.68rem; font-weight: 700; color: #2563EB; background: #EFF8FF; border: 1px solid #B2DDFF; padding: 2px 8px; border-radius: 4px;">PACS v2.4</span>
-            <span style="font-size: 0.80rem; color: #667085;">&bull; Telemetria y Volumetria Tomografica 3D</span>
+current_route = st.session_state.active_nav_route
+if current_route in ("Dossier Cientifico & Teoria", "Roles y Auditoria Hospitalaria"):
+    current_route = "Administracion"
+    st.session_state.active_nav_route = "Administracion"
+
+with st.container(border=True):
+    st.markdown(f"""
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid #F1F5F9; margin-bottom: 10px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+            <span style="font-size: 1.18rem; font-weight: 700; color: #0F172A; letter-spacing: -0.02em;">NEURO-CALC</span>
+            <span style="font-size: 0.82rem; color: #64748B;">Estacion de volumetria tomografica</span>
         </div>
-        <div style="font-size: 0.78rem; color: #475467; display: flex; align-items: center; gap: 8px;">
-            <span><strong>Facultativo:</strong> {active_user_data['full_name']}</span>
-            <span class="clinical-card-badge badge-stable" style="margin: 0;">{active_user_data['role']}</span>
+        <div style="display: flex; align-items: center; gap: 12px; font-size: 0.82rem; color: #475469;">
+            <span>{active_user_data['full_name']} &middot; <span style="color: #64748B;">{active_user_data['role']}</span></span>
+            <span class="status-pill pill-stable">Sesion activa</span>
         </div>
     </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
-# Botones de Navegacion Top-Level en 5 Columnas
-col_n1, col_n2, col_n3, col_n4, col_n5 = st.columns(5)
-current_route = st.session_state.active_nav_route
+    col_n1, col_n2, col_n3, col_n4 = st.columns(4)
+    nav_tabs = [
+        ("Directorio de Pacientes", "Directorio", col_n1),
+        ("Nuevo Paciente e Ingesta", "Nuevo paciente", col_n2),
+        ("Estacion PACS & Resultados", "Estacion PACS", col_n3),
+        ("Administracion", "Administracion", col_n4)
+    ]
 
-nav_tabs = [
-    ("Directorio de Pacientes", "Directorio", col_n1),
-    ("Nuevo Paciente e Ingesta", "Nuevo Paciente", col_n2),
-    ("Estacion PACS & Resultados", "Estacion PACS", col_n3),
-    ("Dossier Cientifico & Teoria", "Especificacion Tecnica", col_n4),
-    ("Roles y Auditoria Hospitalaria", "Roles y Auditoria", col_n5)
-]
-
-for route_key, label_text, col_target in nav_tabs:
-    with col_target:
-        is_sel = (current_route == route_key)
-        b_type = "primary" if is_sel else "secondary"
-        if st.button(label_text, key=f"top_btn_{route_key}", type=b_type, use_container_width=True):
-            st.session_state.active_nav_route = route_key
-            st.rerun()
-
-st.markdown("<hr style='border: 0; border-top: 1px solid #EAECF0; margin: 10px 0 16px 0;'>", unsafe_allow_html=True)
+    for route_key, label_text, col_target in nav_tabs:
+        with col_target:
+            is_sel = (current_route == route_key)
+            b_type = "primary" if is_sel else "secondary"
+            if st.button(label_text, key=f"top_btn_{route_key}", type=b_type, width="stretch"):
+                st.session_state.active_nav_route = route_key
+                st.rerun()
 
 # 5. Barra Lateral (Navegacion Rapida y Conmutador)
 with st.sidebar:
     st.markdown("""
-    <div style="padding-bottom: 12px; border-bottom: 1px solid #EAECF0; margin-bottom: 14px;">
-        <div style="font-size: 0.68rem; font-weight: 700; color: #2563EB; letter-spacing: 0.06em; text-transform: uppercase;">
+    <div style="padding-bottom: 12px; border-bottom: 1px solid #E2E8F0; margin-bottom: 14px;">
+        <div style="font-size: 0.68rem; font-weight: 700; color: #64748B; letter-spacing: 0.06em; text-transform: uppercase;">
             Estacion Diagnostica
         </div>
-        <h3 style="margin: 2px 0 0 0; font-size: 1.15rem; color: #101828;">NEURO-CALC</h3>
-        <div style="font-size: 0.74rem; color: #667085; margin-top: 2px;">
+        <h3 style="margin: 2px 0 0 0; font-size: 1.15rem; color: #0F172A;">NEURO-CALC</h3>
+        <div style="font-size: 0.76rem; color: #64748B; margin-top: 2px;">
             Volumetria por Cuadratura O(h⁴)
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("<div style='font-size: 0.70rem; font-weight: 700; color: #344054; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;'>Navegacion</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size: 0.72rem; font-weight: 700; color: #475469; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;'>Navegacion</div>", unsafe_allow_html=True)
     for route_key, label_text, _ in nav_tabs:
         is_sel = (current_route == route_key)
-        if st.button(label_text, key=f"side_btn_{route_key}", type="primary" if is_sel else "secondary", use_container_width=True):
+        if st.button(label_text, key=f"side_btn_{route_key}", type="primary" if is_sel else "secondary", width="stretch"):
             st.session_state.active_nav_route = route_key
             st.rerun()
 
-    st.markdown("<hr style='border-color: #EAECF0; margin: 14px 0;'>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size: 0.70rem; font-weight: 700; color: #344054; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;'>Paciente Activo</div>", unsafe_allow_html=True)
+    st.markdown("<hr style='border-color: #E2E8F0; margin: 14px 0;'>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size: 0.72rem; font-weight: 700; color: #475469; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;'>Paciente activo</div>", unsafe_allow_html=True)
     st.selectbox(
-        "Paciente Activo",
+        "Paciente activo",
         options=list(p_options.keys()),
         format_func=lambda x: p_options[x],
         key="side_pacs_patient_switcher",
@@ -274,14 +271,14 @@ with st.sidebar:
         label_visibility="collapsed"
     )
 
-    st.markdown("<hr style='border-color: #EAECF0; margin: 14px 0;'>", unsafe_allow_html=True)
+    st.markdown("<hr style='border-color: #E2E8F0; margin: 14px 0;'>", unsafe_allow_html=True)
     st.markdown("""
-    <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px;">
-        <div style="font-size: 0.68rem; font-weight: 700; color: #166534;">SESION PROTEGIDA ACTIVA</div>
-        <div style="font-size: 0.70rem; color: #15803D;">Acceso institucional verificado.</div>
+    <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px;">
+        <div style="font-size: 0.70rem; font-weight: 700; color: #065F46;">SESION ACTIVA</div>
+        <div style="font-size: 0.72rem; color: #047857;">Acceso autenticado.</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Bloquear Terminal", key="side_lock_btn", use_container_width=True):
+    if st.button("Cerrar sesion", key="side_lock_btn", width="stretch"):
         st.session_state.is_presentation_authenticated = False
         st.rerun()
 
@@ -323,11 +320,17 @@ elif current_route == "Estacion PACS & Resultados":
         if st.button("Ir al Directorio de Pacientes"):
             set_active_route("Directorio de Pacientes")
     else:
-        # Selector rapido de paciente en el encabezado de la Estacion PACS
-        col_sw_lbl, col_sw_drop, col_sw_inf = st.columns([1.6, 3.4, 2.5])
-        with col_sw_lbl:
-            st.markdown("<div style='font-size: 0.80rem; font-weight: 600; color: #101828; padding-top: 6px;'>Paciente en Sesion PACS:</div>", unsafe_allow_html=True)
-        with col_sw_drop:
+        col_pacs_h1, col_pacs_h2 = st.columns([3.2, 1.8])
+        with col_pacs_h1:
+            st.markdown(f"""
+            <div class="page-header-wrap" style="margin-bottom: 10px;">
+                <div class="page-eyebrow">Estacion de Telemetria PACS</div>
+                <h1 class="page-title" style="font-size: 1.55rem !important;">{patient_record.get('patient_code', '')} &middot; {patient_record.get('pathology', '')}</h1>
+                <p class="page-subtitle">{patient_record.get('full_name', '')} &middot; {patient_record.get('modality', '')}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        with col_pacs_h2:
+            st.markdown("<div style='font-size: 0.74rem; font-weight: 600; color: #64748B; margin-top: 14px; margin-bottom: 4px;'>CAMBIAR ESTUDIO ACTIVO</div>", unsafe_allow_html=True)
             st.selectbox(
                 "Conmutar Paciente Directo",
                 options=list(p_options.keys()),
@@ -336,10 +339,6 @@ elif current_route == "Estacion PACS & Resultados":
                 on_change=on_top_patient_change,
                 label_visibility="collapsed"
             )
-        with col_sw_inf:
-            st.markdown(f"<div style='font-size: 0.78rem; color: #475467; padding-top: 6px;'><strong>H.C.:</strong> {patient_record.get('patient_code', '')} &nbsp;|&nbsp; <strong>{patient_record.get('full_name', '')}</strong></div>", unsafe_allow_html=True)
-
-        st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
 
         # Carga de datos de la serie segun el caso seleccionado
         packets = []
@@ -475,34 +474,38 @@ elif current_route == "Estacion PACS & Resultados":
             res_riemann = NumericalEngine.calculate_voxel_counting_riemann(z_coords, areas)
             romberg_data = RombergEngine.compute_romberg_table(z_coords, areas, max_levels=3)
 
-            # Encabezado Braintrust y KPIs del caso
+            # Resumen volumetrico y metodo aplicado
             timestamp = packets[0].timestamp_utc if packets else "2026-11-06T12:00:00Z"
-            st.markdown(
-                render_workstation_header(
-                    patient_record.get("patient_code", active_pid),
-                    patient_record.get("modality", "MR"),
-                    timestamp,
-                    patient_record.get("pathology", "Neoplasia")
-                ),
-                unsafe_allow_html=True
-            )
+            crc_all_ok = all(p.verify_integrity() for p in packets)
+            method_desc = "Simpson 1/3 compuesto (par)" if "Puro" in res_simpson.method_used else "Hibrido Simpson 1/3 + 3/8 (impar)"
 
-            col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
-            badge_type = "stable" if "Puro" in res_simpson.method_used else "warning"
-            badge_text = "SIMPSON 1/3 PURO" if "Puro" in res_simpson.method_used else "SIMPSON HIBRIDO 1/3 + 3/8"
-
+            col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
             with col_kpi1:
-                st.markdown(render_metric_card("Volumen Calculado (Simpson)", f"{res_simpson.volume_cm3:.3f}", "cm³", badge_text, badge_type), unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="kpi-card">
+                    <div class="kpi-label">Volumen calculado</div>
+                    <div class="kpi-value">{res_simpson.volume_cm3:.3f}<span class="kpi-unit">cm³</span></div>
+                    <div class="kpi-context">{method_desc}</div>
+                </div>
+                """, unsafe_allow_html=True)
             with col_kpi2:
-                st.markdown(render_metric_card("Convergencia Matematica", res_simpson.error_order, "", "PRECISION CUARTICA", "cyan"), unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="kpi-card">
+                    <div class="kpi-label">Orden de convergencia</div>
+                    <div class="kpi-value">{res_simpson.error_order}</div>
+                    <div class="kpi-context">Cuadratura polinomial compuesta</div>
+                </div>
+                """, unsafe_allow_html=True)
             with col_kpi3:
-                st.markdown(render_metric_card("Espesor Axial de Corte (h)", f"{res_simpson.slice_thickness_h:.2f}", "mm", f"{res_simpson.num_slices} CORTES", "stable"), unsafe_allow_html=True)
-            with col_kpi4:
-                crc_all_ok = all(p.verify_integrity() for p in packets)
-                crc_badge = "INTEGRIDAD CRC32 OK" if crc_all_ok else "ERROR CHECKSUM"
-                st.markdown(render_metric_card("Telemetria Radiologica", "100%", "Sincronizado", crc_badge, "stable"), unsafe_allow_html=True)
+                crc_label = "CRC32 integro al 100%" if crc_all_ok else "Error de verificacion CRC32"
+                st.markdown(f"""
+                <div class="kpi-card">
+                    <div class="kpi-label">Adquisicion e integridad</div>
+                    <div class="kpi-value">{res_simpson.num_slices} cortes<span class="kpi-unit">&middot; {res_simpson.slice_thickness_h:.1f} mm</span></div>
+                    <div class="kpi-context">{crc_label}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-            # Render de la estacion clinica operativa con jerarquia contextual y proteccion de IDs Plotly
             render_clinical_workstation(
                 packets=packets,
                 annotated_slices=annotated_slices,
@@ -524,72 +527,85 @@ elif current_route == "Estacion PACS & Resultados":
             )
 
 # -----------------------------------------------------------------------------
-# RUTA 4: ESPECIFICACION TECNICA Y ANALISIS DE ERROR
+# RUTA 4: ADMINISTRACION (ESPECIFICACION TECNICA Y ROLES RBAC)
 # -----------------------------------------------------------------------------
-elif current_route == "Dossier Cientifico & Teoria":
-    active_pid = st.session_state.active_patient_id
-    patient_record = db.get_patient(active_pid) or db.list_patients()[0]
-    case_dir_abs = BASE_DIR / patient_record.get("data_dir", "data/kaggle_cases/PATIENT_01_TCGA_4944")
+elif current_route == "Administracion":
+    st.markdown("""
+    <div class="page-header-wrap">
+        <div class="page-eyebrow">Administracion del Sistema</div>
+        <h1 class="page-title">Especificacion tecnica y auditoria</h1>
+        <p class="page-subtitle">Documentacion matematica del motor volumetrico, cuantificacion de error y control de acceso.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    if case_dir_abs.exists():
-        all_pkts, _, info = BrainLesionSegmenter.process_case_series(
-            str(case_dir_abs),
-            lesion_type="Glioma" if "Astrocitoma" in patient_record.get("pathology", "") else "Tumor"
-        )
-        if "TCGA_4944" in active_pid and len(all_pkts) >= 15:
-            packets = all_pkts[4:15]
-            case_slices_meta = info.get("slices", [])[4:15]
-        elif "TCGA_4941" in active_pid and len(all_pkts) >= 19:
-            packets = all_pkts[9:19]
-            case_slices_meta = info.get("slices", [])[9:19]
-        elif "TCGA_4943" in active_pid and len(all_pkts) >= 20:
-            packets = all_pkts[9:20]
-            case_slices_meta = info.get("slices", [])[9:20]
-        elif "TCGA_5393" in active_pid and len(all_pkts) >= 14:
-            packets = all_pkts[3:14]
-            case_slices_meta = info.get("slices", [])[3:14]
-        elif "TCGA_4942" in active_pid and len(all_pkts) >= 15:
-            packets = all_pkts[7:15]
-            case_slices_meta = info.get("slices", [])[7:15]
-        elif "TCGA_7684" in active_pid and len(all_pkts) >= 23:
-            packets = all_pkts[11:23]
-            case_slices_meta = info.get("slices", [])[11:23]
+    tab_adm_spec, tab_adm_rbac = st.tabs([
+        "Especificacion tecnica y error",
+        "Roles y auditoria (RBAC)"
+    ])
+
+    with tab_adm_spec:
+        active_pid = st.session_state.active_patient_id
+        patient_record = db.get_patient(active_pid) or db.list_patients()[0]
+        case_dir_abs = BASE_DIR / patient_record.get("data_dir", "data/kaggle_cases/PATIENT_01_TCGA_4944")
+
+        if case_dir_abs.exists():
+            all_pkts, _, info = BrainLesionSegmenter.process_case_series(
+                str(case_dir_abs),
+                lesion_type="Glioma" if "Astrocitoma" in patient_record.get("pathology", "") else "Tumor"
+            )
+            if "TCGA_4944" in active_pid and len(all_pkts) >= 15:
+                packets = all_pkts[4:15]
+                case_slices_meta = info.get("slices", [])[4:15]
+            elif "TCGA_4941" in active_pid and len(all_pkts) >= 19:
+                packets = all_pkts[9:19]
+                case_slices_meta = info.get("slices", [])[9:19]
+            elif "TCGA_4943" in active_pid and len(all_pkts) >= 20:
+                packets = all_pkts[9:20]
+                case_slices_meta = info.get("slices", [])[9:20]
+            elif "TCGA_5393" in active_pid and len(all_pkts) >= 14:
+                packets = all_pkts[3:14]
+                case_slices_meta = info.get("slices", [])[3:14]
+            elif "TCGA_4942" in active_pid and len(all_pkts) >= 15:
+                packets = all_pkts[7:15]
+                case_slices_meta = info.get("slices", [])[7:15]
+            elif "TCGA_7684" in active_pid and len(all_pkts) >= 23:
+                packets = all_pkts[11:23]
+                case_slices_meta = info.get("slices", [])[11:23]
+            else:
+                packets = all_pkts
+                case_slices_meta = info.get("slices", [])
+            z_coords = np.array([p.z_position_mm for p in packets], dtype=np.float64)
+            areas = np.array([p.cross_sectional_area_mm2 for p in packets], dtype=np.float64)
         else:
-            packets = all_pkts
-            case_slices_meta = info.get("slices", [])
-        z_coords = np.array([p.z_position_mm for p in packets], dtype=np.float64)
-        areas = np.array([p.cross_sectional_area_mm2 for p in packets], dtype=np.float64)
-    else:
-        sim = TelemetryStreamSimulator()
-        packets = sim.generate_synthetic_cyst_stream(15, 2.67, 20.0, 20.0, 20.0)
-        z_coords = np.array([p.z_position_mm for p in packets], dtype=np.float64)
-        areas = np.array([p.cross_sectional_area_mm2 for p in packets], dtype=np.float64)
-        case_slices_meta = []
+            sim = TelemetryStreamSimulator()
+            packets = sim.generate_synthetic_cyst_stream(15, 2.67, 20.0, 20.0, 20.0)
+            z_coords = np.array([p.z_position_mm for p in packets], dtype=np.float64)
+            areas = np.array([p.cross_sectional_area_mm2 for p in packets], dtype=np.float64)
+            case_slices_meta = []
 
-    res_simpson = NumericalEngine.calculate_simpson_13_composite(z_coords, areas)
-    res_trapezoid = NumericalEngine.calculate_trapezoidal(z_coords, areas)
-    res_riemann = NumericalEngine.calculate_voxel_counting_riemann(z_coords, areas)
-    romberg_data = RombergEngine.compute_romberg_table(z_coords, areas, max_levels=3)
+        res_simpson = NumericalEngine.calculate_simpson_13_composite(z_coords, areas)
+        res_trapezoid = NumericalEngine.calculate_trapezoidal(z_coords, areas)
+        res_riemann = NumericalEngine.calculate_voxel_counting_riemann(z_coords, areas)
+        romberg_data = RombergEngine.compute_romberg_table(z_coords, areas, max_levels=3)
 
-    render_academic_dossier(
-        res_simpson=res_simpson,
-        res_trapezoid=res_trapezoid,
-        res_riemann=res_riemann,
-        romberg_data=romberg_data,
-        case_slices_meta=case_slices_meta,
-        z_coords=z_coords,
-        areas=areas,
-        dataset_option=patient_record.get("pathology", "Astrocitoma"),
-        patient_record=patient_record,
-        all_patients=all_patients
-    )
+        render_academic_dossier(
+            res_simpson=res_simpson,
+            res_trapezoid=res_trapezoid,
+            res_riemann=res_riemann,
+            romberg_data=romberg_data,
+            case_slices_meta=case_slices_meta,
+            z_coords=z_coords,
+            areas=areas,
+            dataset_option=patient_record.get("pathology", "Astrocitoma"),
+            patient_record=patient_record,
+            all_patients=all_patients,
+            embedded=True
+        )
 
-# -----------------------------------------------------------------------------
-# RUTA 5: GESTION DE ROLES Y BITACORA INMUTABLE DE AUDITORIA
-# -----------------------------------------------------------------------------
-elif current_route == "Roles y Auditoria Hospitalaria":
-    render_roles_and_audit(
-        db=db,
-        current_user_id=st.session_state.current_user_id,
-        on_change_user=set_active_user
-    )
+    with tab_adm_rbac:
+        render_roles_and_audit(
+            db=db,
+            current_user_id=st.session_state.current_user_id,
+            on_change_user=set_active_user,
+            embedded=True
+        )

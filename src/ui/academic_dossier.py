@@ -19,7 +19,8 @@ def render_academic_dossier(
     areas: Optional[np.ndarray] = None,
     dataset_option: str = "",
     patient_record: Optional[Dict[str, Any]] = None,
-    all_patients: Optional[List[Dict[str, Any]]] = None
+    all_patients: Optional[List[Dict[str, Any]]] = None,
+    embedded: bool = False
 ):
     """Renderiza la especificacion matematica, modelos de segmentacion y cuantificacion de errores."""
     p_code = patient_record.get("patient_code", "PAC-ACTIVO") if patient_record else "PAC-ACTIVO"
@@ -50,45 +51,46 @@ def render_academic_dossier(
     # -------------------------------------------------------------------------
     # ENCABEZADO DE PAGINA Y METRICAS DEL CASO EN AUDITORIA
     # -------------------------------------------------------------------------
-    st.markdown("""
-    <div class="page-header">
-        <div class="page-eyebrow">Especificacion Tecnica</div>
-        <h1 class="page-title">Modelo Matematico, Segmentacion y Analisis de Error</h1>
-        <p class="page-subtitle">Formulacion de cuadraturas compuestas, algoritmos de contorno y cotas de incertidumbre fisica.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    if not embedded:
+        st.markdown("""
+        <div class="page-header-wrap">
+            <div class="page-eyebrow">Especificacion Tecnica</div>
+            <h1 class="page-title">Modelo matematico, segmentacion y analisis de error</h1>
+            <p class="page-subtitle">Formulacion de cuadraturas compuestas, algoritmos de contorno y cotas de incertidumbre fisica.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     with col_m1:
         st.markdown(f"""
-        <div class="clinical-card">
-            <div class="clinical-card-header">Caso Evaluado</div>
-            <div class="clinical-card-value" style="font-size: 1.15rem;">{p_code}</div>
-            <div class="clinical-card-badge badge-cyan">{p_pathology[:24]}</div>
+        <div class="kpi-card">
+            <div class="kpi-label">Caso evaluado</div>
+            <div class="kpi-value" style="font-size: 1.25rem;">{p_code}</div>
+            <div class="kpi-context">{p_pathology}</div>
         </div>
         """, unsafe_allow_html=True)
     with col_m2:
         st.markdown(f"""
-        <div class="clinical-card">
-            <div class="clinical-card-header">Volumen Simpson</div>
-            <div class="clinical-card-value">{vol_simp:.3f}<span class="clinical-card-unit">cm³</span></div>
-            <div class="clinical-card-badge badge-stable">{p_slices} CORTES | h = {p_h:.1f} MM</div>
+        <div class="kpi-card">
+            <div class="kpi-label">Volumen Simpson</div>
+            <div class="kpi-value">{vol_simp:.3f}<span class="kpi-unit">cm³</span></div>
+            <div class="kpi-context">{p_slices} cortes &middot; h = {p_h:.1f} mm</div>
         </div>
         """, unsafe_allow_html=True)
     with col_m3:
         st.markdown(f"""
-        <div class="clinical-card">
-            <div class="clinical-card-header">Cota de Truncamiento</div>
-            <div class="clinical-card-value">&le; {trunc_bound_cm3:.4f}<span class="clinical-card-unit">cm³</span></div>
-            <div class="clinical-card-badge badge-cyan">ORDEN O(h⁴)</div>
+        <div class="kpi-card">
+            <div class="kpi-label">Cota de truncamiento</div>
+            <div class="kpi-value">&le; {trunc_bound_cm3:.4f}<span class="kpi-unit">cm³</span></div>
+            <div class="kpi-context">Orden teorico O(h⁴)</div>
         </div>
         """, unsafe_allow_html=True)
     with col_m4:
         st.markdown(f"""
-        <div class="clinical-card">
-            <div class="clinical-card-header">Incertidumbre PVE (Z)</div>
-            <div class="clinical-card-value">&plusmn; {pve_uncertainty_cm3:.3f}<span class="clinical-card-unit">cm³</span></div>
-            <div class="clinical-card-badge badge-warning">VOLUMEN PARCIAL EN POLOS</div>
+        <div class="kpi-card">
+            <div class="kpi-label">Incertidumbre PVE (Z)</div>
+            <div class="kpi-value">&plusmn; {pve_uncertainty_cm3:.3f}<span class="kpi-unit">cm³</span></div>
+            <div class="kpi-context">Efecto de volumen parcial en polos</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -247,7 +249,7 @@ def render_academic_dossier(
                             "FN (mm²)": f"{max(0.0, -diff_a):.1f}"
                         })
                 if aud_rows:
-                    st.dataframe(pd.DataFrame(aud_rows), use_container_width=True, hide_index=True)
+                    st.dataframe(pd.DataFrame(aud_rows), width="stretch", hide_index=True)
 
     # =========================================================================
     # TAB 4: ALCANCE, DOSIMETRIA Y REFERENCIAS

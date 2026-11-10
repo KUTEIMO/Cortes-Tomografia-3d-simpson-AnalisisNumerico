@@ -1,6 +1,5 @@
 """
 Modulo de Admision e Ingesta de Pacientes - NEURO-CALC
-Recepcion de series tomograficas/RMN, extraccion morfometrica y volumetria Simpson 1/3.
 """
 
 import os
@@ -9,7 +8,7 @@ import zipfile
 import json
 import shutil
 from pathlib import Path
-from typing import Callable, Dict, Any
+from typing import Callable, Any
 import numpy as np
 import cv2
 import streamlit as st
@@ -24,11 +23,11 @@ CASES_DIR = BASE_DIR / "data" / "kaggle_cases"
 
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".json"}
 MAX_ZIP_FILES = 120
-MAX_ZIP_UNCOMPRESSED_BYTES = 150 * 1024 * 1024  # 150 MB
+MAX_ZIP_UNCOMPRESSED_BYTES = 150 * 1024 * 1024
 
 
 def _safe_extract_zip(zip_source: Any, target_dir: Path):
-    """Descomprime archivos ZIP validando extensiones, cuota de tamano y proteccion contra Path Traversal."""
+    """Descomprime archivos ZIP validando extensiones, cuota de tamano y proteccion Path Traversal."""
     target_resolved = target_dir.resolve()
     target_resolved.mkdir(parents=True, exist_ok=True)
 
@@ -68,118 +67,129 @@ def render_patient_intake(
 ):
     """Renderiza el modulo de admision e ingesta de estudios radiologicos."""
     st.markdown("""
-    <div class="page-header">
-        <div class="page-eyebrow">Admision Radiologica</div>
-        <h1 class="page-title">Registro y Procesamiento de Nuevo Paciente</h1>
-        <p class="page-subtitle">Ingesta de series axiales, segmentacion morfometrica e integracion volumetrica.</p>
+    <div class="page-header-wrap">
+        <div class="page-eyebrow">Admision Radiologica / Ingesta</div>
+        <h1 class="page-title">Nuevo paciente</h1>
+        <p class="page-subtitle">Incorporacion de series tomograficas o RMN axiales para segmentacion y calculo volumetrico.</p>
     </div>
     """, unsafe_allow_html=True)
 
-    with st.expander("Criterios Tecnicos de Adquisicion y Formatos Admitidos", expanded=False):
+    with st.expander("Criterios tecnicos de adquisicion y formatos admitidos", expanded=False):
         st.markdown("""
-        <div style="font-size: 0.82rem; color: #344054; line-height: 1.6;">
-            Requisitos tecnicos para mantener convergencia de cuarto orden <strong>O(h^4)</strong>:
-            <ul style="margin-top: 6px; padding-left: 18px;">
-                <li><strong>Plano Anatómico:</strong> Cortes axiales transversos paralelos a la Linea Orbito-Meatal (LOM 0°).</li>
-                <li><strong>Espesor Axial (h):</strong> Espaciado uniforme constante (tipicamente 3.0 mm a 5.0 mm).</li>
-                <li><strong>Secuencia:</strong> RMN Axial FLAIR para edema/infiltracion glial; RMN T1 con Gadolinio (T1+C) para lesiones captantes.</li>
-                <li><strong>Formato de Carga:</strong> Paquete <code>.zip</code> con cortes secuenciales ordenados y archivo opcional <code>metadata.json</code>.</li>
+        <div style="font-size: 0.84rem; color: #334155; line-height: 1.65;">
+            <ul style="margin: 0; padding-left: 18px;">
+                <li><strong>Plano anatomico:</strong> Cortes axiales transversos paralelos a la Linea Orbito-Meatal (LOM 0°).</li>
+                <li><strong>Espesor axial (h):</strong> Espaciado uniforme constante entre cortes (tipicamente 3.0 mm a 5.0 mm).</li>
+                <li><strong>Secuencia recomendada:</strong> RMN Axial FLAIR o RMN T1 con contraste para delimitacion tumoral.</li>
+                <li><strong>Formato admitido:</strong> Paquete <code>.zip</code> con imagenes secuenciales ordenadas y archivo opcional <code>metadata.json</code>.</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
 
-    tab_examples, tab_manual = st.tabs([
-        "Banco Clinico Validado",
-        "Carga Manual de Estudio (.zip)"
-    ])
+    with st.container(border=True):
+        tab_examples, tab_manual = st.tabs([
+            "Repositorio clinico validado",
+            "Carga manual de estudio (.zip)"
+        ])
 
-    # -------------------------------------------------------------------------
-    # PESTANA 1: INGESTA DESDE BANCO CLINICO
-    # -------------------------------------------------------------------------
-    with tab_examples:
-        with st.container(border=True):
+        with tab_examples:
             st.markdown("""
-            <div style="font-weight: 700; color: #101828; font-size: 0.95rem; margin-bottom: 4px;">
-                Ingesta Rapida desde Repositorio de Casos Reales (TCGA)
+            <div style="font-weight: 600; color: #0F172A; font-size: 0.96rem; margin-bottom: 4px;">
+                Ingesta desde paquetes hospitalarios verificados
             </div>
-            <div style="font-size: 0.82rem; color: #475467; margin-bottom: 12px;">
-                Seleccione un paquete hospitalario de <code>data/banco_casos_reales_zip/</code> para desempaquetarlo, procesar sus contornos y registrarlo en el directorio.
+            <div style="font-size: 0.84rem; color: #475569; margin-bottom: 14px;">
+                Seleccione un estudio comprimido de <code>data/banco_casos_reales_zip/</code> para procesarlo y registrarlo en el directorio clinico.
             </div>
             """, unsafe_allow_html=True)
 
             example_cases = {
-                "Caso 1: Astrocitoma Fibrilar Frontoparietal (TCGA-4944) - RMN FLAIR 11 cortes": {
+                "Caso 1: Astrocitoma Fibrilar Frontoparietal (TCGA-4944) - RMN FLAIR": {
                     "zip": "CASO_01_ASTROCITOMA_TCGA_4944.zip",
                     "patient_id": "PATIENT_01_TCGA_4944",
                     "code": "PAC-2026-4944",
                     "name": "Paciente Anonimizado TCGA-4944",
                     "pathology": "Astrocitoma Fibrilar Grado II",
                     "modality": "MR Axial FLAIR",
+                    "slices_label": "11 cortes",
                     "h": 5.0,
                     "px": 0.9375
                 },
-                "Caso 2: Oligodendroglioma de Bajo Grado (TCGA-4941) - RMN FLAIR 10 cortes": {
+                "Caso 2: Oligodendroglioma de Bajo Grado (TCGA-4941) - RMN FLAIR": {
                     "zip": "CASO_02_OLIGODENDROGLIOMA_TCGA_4941.zip",
                     "patient_id": "PATIENT_02_TCGA_4941",
                     "code": "PAC-2026-4941",
                     "name": "Paciente Anonimizado TCGA-4941",
                     "pathology": "Oligodendroglioma de Bajo Grado",
                     "modality": "MR Axial FLAIR",
+                    "slices_label": "10 cortes",
                     "h": 5.0,
                     "px": 0.9375
                 },
-                "Caso 3: Oligoastrocitoma Anaplasico (TCGA-4943) - RMN FLAIR 11 cortes": {
+                "Caso 3: Oligoastrocitoma Anaplasico (TCGA-4943) - RMN FLAIR": {
                     "zip": "CASO_03_OLIGOASTROCITOMA_TCGA_4943.zip",
                     "patient_id": "PATIENT_03_TCGA_4943",
                     "code": "PAC-2026-4943",
                     "name": "Paciente Anonimizado TCGA-4943",
                     "pathology": "Oligoastrocitoma Grado II",
                     "modality": "MR Axial FLAIR",
+                    "slices_label": "11 cortes",
                     "h": 5.0,
                     "px": 0.9375
                 },
-                "Caso 4: Glioblastoma Multiforme Parietotemporal (TCGA-5393) - RMN FLAIR 11 cortes": {
+                "Caso 4: Glioblastoma Multiforme Parietotemporal (TCGA-5393) - RMN FLAIR": {
                     "zip": "CASO_04_GLIOBLASTOMA_TCGA_5393.zip",
                     "patient_id": "PATIENT_04_TCGA_5393",
                     "code": "PAC-2026-5393",
                     "name": "Paciente Anonimizado TCGA-5393",
                     "pathology": "Glioblastoma Multiforme",
                     "modality": "MR Axial FLAIR",
+                    "slices_label": "11 cortes",
                     "h": 5.0,
                     "px": 0.9375
                 },
-                "Caso 5: Glioma Frontal de Grado II (TCGA-4942) - RMN FLAIR 8 cortes": {
+                "Caso 5: Glioma Frontal de Grado II (TCGA-4942) - RMN FLAIR": {
                     "zip": "CASO_05_GLIOMA_FRONTAL_TCGA_4942.zip",
                     "patient_id": "PATIENT_05_TCGA_4942",
                     "code": "PAC-2026-4942",
                     "name": "Paciente Anonimizado TCGA-4942",
                     "pathology": "Glioma Frontal de Grado II",
                     "modality": "MR Axial FLAIR",
+                    "slices_label": "8 cortes",
                     "h": 5.0,
                     "px": 0.9375
                 },
-                "Caso 6: Astrocitoma Fibrilar Parietal Izquierdo (TCGA-7684) - RMN FLAIR 12 cortes": {
+                "Caso 6: Astrocitoma Fibrilar Parietal Izquierdo (TCGA-7684) - RMN FLAIR": {
                     "zip": "CASO_06_ASTROCITOMA_TCGA_7684.zip",
                     "patient_id": "PATIENT_06_TCGA_7684",
                     "code": "PAC-2026-7684",
                     "name": "Paciente Anonimizado TCGA-7684",
                     "pathology": "Astrocitoma Fibrilar Parietal",
                     "modality": "MR Axial FLAIR",
+                    "slices_label": "12 cortes",
                     "h": 5.0,
                     "px": 0.9375
                 }
             }
 
             selected_case_label = st.selectbox(
-                "Seleccionar Estudio Clinico",
+                "Estudio clinico disponible",
                 list(example_cases.keys())
             )
-            selected_case_info = example_cases[selected_case_label]
+            info_sel = example_cases[selected_case_label]
 
-            if st.button("Procesar e Incorporar Paciente", type="primary", use_container_width=True):
-                with st.spinner("Extrayendo serie tomografica y ejecutando segmentacion..."):
-                    zip_path = EXAMPLES_DIR / selected_case_info["zip"]
-                    target_dir = CASES_DIR / selected_case_info["patient_id"]
+            st.markdown(f"""
+            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 12px 14px; margin: 10px 0 14px 0; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 0.82rem; color: #334155;">
+                <span><strong>Historia:</strong> {info_sel['code']}</span>
+                <span><strong>Modalidad:</strong> {info_sel['modality']}</span>
+                <span><strong>Adquisicion:</strong> {info_sel['slices_label']} &middot; h = {info_sel['h']:.1f} mm</span>
+                <span><strong>Archivo:</strong> <code>{info_sel['zip']}</code></span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if st.button("Procesar e incorporar paciente", type="primary", width="stretch"):
+                with st.spinner("Extrayendo cortes y calculando volumetria..."):
+                    zip_path = EXAMPLES_DIR / info_sel["zip"]
+                    target_dir = CASES_DIR / info_sel["patient_id"]
                     try:
                         if zip_path.exists():
                             _safe_extract_zip(zip_path, target_dir)
@@ -208,69 +218,59 @@ def render_patient_intake(
                     )
 
                     patient_record = {
-                        "patient_id": selected_case_info["patient_id"],
-                        "patient_code": selected_case_info["code"],
-                        "full_name": selected_case_info["name"],
+                        "patient_id": info_sel["patient_id"],
+                        "patient_code": info_sel["code"],
+                        "full_name": info_sel["name"],
                         "age": 48,
                         "gender": "M",
-                        "modality": selected_case_info["modality"],
-                        "pathology": selected_case_info["pathology"],
+                        "modality": info_sel["modality"],
+                        "pathology": info_sel["pathology"],
                         "num_slices": n_slices,
-                        "slice_thickness_h": selected_case_info["h"],
-                        "pixel_spacing": selected_case_info["px"],
+                        "slice_thickness_h": info_sel["h"],
+                        "pixel_spacing": info_sel["px"],
                         "matrix_dim": 256,
                         "volume_cm3": vol_cm3,
                         "risk_stage": risk_stage,
                         "physician": "Unidad de Neuro-Oncologia",
-                        "data_dir": f"data/kaggle_cases/{selected_case_info['patient_id']}",
+                        "data_dir": f"data/kaggle_cases/{info_sel['patient_id']}",
                         "status": "Procesado y Validado",
-                        "notes": f"Serie {selected_case_info['zip']} procesada. Volumetria por Simpson 1/3 completada."
+                        "notes": f"Serie {info_sel['zip']} procesada. Volumetria por Simpson 1/3 completada."
                     }
 
                     db.save_patient(patient_record, user_id=current_user_id)
-                    st.success(f"Paciente {selected_case_info['code']} registrado correctamente (Volumen: {vol_cm3:.3f} cm³).")
+                    st.success(f"Paciente {info_sel['code']} registrado correctamente ({vol_cm3:.3f} cm³).")
 
-                    if st.button("Abrir en Estacion PACS", key="btn_open_after_intake"):
-                        on_success_intake(selected_case_info["patient_id"])
+                    if st.button("Abrir estudio en PACS", key="btn_open_after_intake"):
+                        on_success_intake(info_sel["patient_id"])
 
-    # -------------------------------------------------------------------------
-    # PESTANA 2: ADMISION MANUAL POR ARCHIVO ZIP
-    # -------------------------------------------------------------------------
-    with tab_manual:
-        with st.container(border=True):
-            st.markdown("""
-            <div style="font-weight: 700; color: #101828; font-size: 0.95rem; margin-bottom: 8px;">
-                Formulario de Admision y Parametrizacion Tomografica
-            </div>
-            """, unsafe_allow_html=True)
-
+        with tab_manual:
             col_f1, col_f2 = st.columns(2)
             with col_f1:
-                st.markdown("<div class='section-label'>Datos del Paciente</div>", unsafe_allow_html=True)
-                form_code = st.text_input("Codigo de Historia Clinica", value="PAC-2026-9901")
-                form_name = st.text_input("Identificador Anonimizado", value="Paciente Anonimizado 04")
+                st.markdown("<div style='font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 8px;'>Identificacion Clinica</div>", unsafe_allow_html=True)
+                form_code = st.text_input("Codigo de historia", value="PAC-2026-9901")
+                form_name = st.text_input("Referencia anonimizada", value="Paciente Anonimizado 04")
                 form_age = st.number_input("Edad", min_value=1, max_value=110, value=45)
-                form_gender = st.selectbox("Sexo Biologico", ["Masculino (M)", "Femenino (F)", "Otro"])
+                form_gender = st.selectbox("Sexo biologico", ["Masculino (M)", "Femenino (F)", "Otro"])
 
             with col_f2:
-                st.markdown("<div class='section-label'>Parametros de Adquisicion</div>", unsafe_allow_html=True)
-                form_pathology = st.text_input("Diagnostico Presuntivo", value="Glioblastoma Multiforme Frontal")
+                st.markdown("<div style='font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 8px;'>Parametros Tomograficos</div>", unsafe_allow_html=True)
+                form_pathology = st.text_input("Diagnostico presuntivo", value="Glioblastoma Multiforme Frontal")
                 form_modality = st.selectbox("Modalidad", ["MR Axial FLAIR", "MR Axial T1+C", "TC Cerebral Simple", "TC Cerebral Contrastada"])
-                form_h = st.number_input("Espesor Nominal h (mm)", min_value=0.5, max_value=15.0, value=5.0, step=0.5)
-                form_px = st.number_input("Pixel Spacing (mm/px)", min_value=0.1, max_value=3.0, value=0.9375, step=0.05)
+                form_h = st.number_input("Espesor nominal h (mm)", min_value=0.5, max_value=15.0, value=5.0, step=0.5)
+                form_px = st.number_input("Pixel spacing (mm/px)", min_value=0.1, max_value=3.0, value=0.9375, step=0.05)
 
-            st.markdown("<div class='section-label'>Archivo de Serie Tomografica</div>", unsafe_allow_html=True)
+            st.markdown("<hr style='border: 0; border-top: 1px solid #F1F5F9; margin: 14px 0;'>", unsafe_allow_html=True)
             uploaded_case_file = st.file_uploader(
-                "Cargar Archivo ZIP con cortes axiales ordenados",
+                "Archivo comprimido (.zip) con cortes axiales ordenados",
                 type=["zip"],
                 help="Suba un archivo .zip con cortes PNG/JPG y metadata.json opcional."
             )
 
-            if st.button("Ejecutar Segmentacion e Incorporar Estudio", type="primary", use_container_width=True):
+            if st.button("Procesar estudio y registrar", type="primary", width="stretch"):
                 if not uploaded_case_file:
-                    st.error("Debe cargar un archivo ZIP con la serie tomografica.")
+                    st.error("Cargue un archivo .zip antes de continuar.")
                 else:
-                    with st.spinner("Validando paquete, computando contornos e integrando volumen..."):
+                    with st.spinner("Validando paquete y calculando cuadratura..."):
                         safe_code = re.sub(r'[^A-Za-z0-9_]', '', form_code.replace('-', '_')).upper()
                         if not safe_code:
                             safe_code = "CUSTOM_CASE"
@@ -302,7 +302,7 @@ def render_patient_intake(
                             num_slices_found = len(extracted_imgs)
 
                             if num_slices_found < 3:
-                                st.error(f"Se encontraron solo {num_slices_found} cortes. Se requieren al menos 3 cortes.")
+                                st.error(f"Se encontraron solo {num_slices_found} cortes. Se requieren al menos 3.")
                                 st.stop()
 
                             segmenter = BrainLesionSegmenter()
@@ -381,7 +381,7 @@ def render_patient_intake(
                         }
 
                         db.save_patient(patient_record, user_id=current_user_id)
-                        st.success(f"Paciente {form_code} registrado exitosamente. Volumen calculado: {calc_vol:.4f} cm³.")
+                        st.success(f"Paciente {form_code} registrado exitosamente ({calc_vol:.3f} cm³).")
 
-                        if st.button("Abrir Caso en Estacion PACS", key="btn_open_custom_pacs"):
+                        if st.button("Abrir estudio en PACS", key="btn_open_custom_pacs"):
                             on_success_intake(clean_id)
