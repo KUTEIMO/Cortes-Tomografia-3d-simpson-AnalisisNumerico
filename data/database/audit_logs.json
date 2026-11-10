@@ -1,0 +1,10 @@
+[
+  {
+    "timestamp": "2026-11-10T12:31:42.764125+00:00",
+    "user_id": "SISTEMA",
+    "action": "INITIALIZE_DATABASE",
+    "patient_id": null,
+    "details": "Inicializacion de base de datos con casos clinicos validados.",
+    "crc32_checksum": "0x84ca14c5"
+  }
+]

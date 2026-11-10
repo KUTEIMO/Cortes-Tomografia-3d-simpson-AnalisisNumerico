@@ -1,0 +1,4 @@
+"""
+Paquete raiz de NeuroCalc
+"""
+
