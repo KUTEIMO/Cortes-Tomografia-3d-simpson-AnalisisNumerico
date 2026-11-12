@@ -62,11 +62,3 @@ streamlit run src/app.py
 
 ---
 
-## Despliegue en Streamlit Community Cloud
-
-1. Subir el repositorio a GitHub.
-2. En [share.streamlit.io](https://share.streamlit.io), crear una nueva aplicacion apuntando a `src/app.py`.
-3. *(Opcional)* En *App Settings -> Secrets*, configurar una clave personalizada:
-   ```toml
-   ACCESS_KEY = "tu_clave_privada"
-   ```
