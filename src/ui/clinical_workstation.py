@@ -359,66 +359,84 @@ def render_clinical_workstation(
             if prev_area is not None and next_area is not None:
                 d_prev = cur_area - prev_area
                 d_next = next_area - cur_area
-                trans_html = f"Corte {idx}: {prev_area:.4f} ({d_prev:+.4f}) &rarr; Corte {idx+1}: {cur_area:.4f} &rarr; Corte {idx+2}: {next_area:.4f} ({d_next:+.4f}) mm²"
+                trans_html = f"Corte {idx}: {prev_area:.2f} mm² &rarr; <strong>Corte {idx+1} (Actual): {cur_area:.2f} mm²</strong> &rarr; Corte {idx+2}: {next_area:.2f} mm²"
             elif prev_area is not None:
-                d_prev = cur_area - prev_area
-                trans_html = f"Corte {idx}: {prev_area:.4f} ({d_prev:+.4f}) mm² &rarr; Apice superior ({cur_area:.4f} mm²)"
+                trans_html = f"Corte {idx}: {prev_area:.2f} mm² &rarr; <strong>Corte {idx+1} (Actual): {cur_area:.2f} mm²</strong> (Extremo superior)"
             elif next_area is not None:
-                d_next = next_area - cur_area
-                trans_html = f"Base inferior ({cur_area:.4f} mm²) &rarr; Corte {idx+2}: {next_area:.4f} ({d_next:+.4f}) mm²"
+                trans_html = f"(Extremo inferior) <strong>Corte {idx+1} (Actual): {cur_area:.2f} mm²</strong> &rarr; Corte {idx+2}: {next_area:.2f} mm²"
             else:
-                trans_html = f"Corte unico: {cur_area:.4f} mm²"
+                trans_html = f"Corte unico: {cur_area:.2f} mm²"
 
             if cur_area > 0:
                 audit_html = textwrap.dedent(f"""
-<div style="background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 8px; padding: 14px 18px; margin-top: 14px;">
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+<div style="background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 8px; padding: 16px 20px; margin-top: 14px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 10px; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
         <div>
             <div style="font-size: 0.76rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em;">
-                Auditoria Seccional: Mascara Manual Radiologo (GT) vs Vision Artificial Espectral + Spline C² (IA)
+                Resultados del Corte Activo: Comparacion entre Radiologo (Azul) y Nuestra Vision Artificial (Verde)
             </div>
-            <div style="font-size: 0.80rem; color: #0F172A; font-weight: 600; margin-top: 2px;">
-                Corte {idx + 1} de {total_active_slices} &middot; cota z = {cur_z:.4f} mm &middot; espesor h = {h_mm:.4f} mm
+            <div style="font-size: 0.84rem; color: #0F172A; font-weight: 600; margin-top: 2px;">
+                Corte {idx + 1} de {total_active_slices} &middot; Posicion axial z = {cur_z:.1f} mm &middot; Espesor de rebanada h = {h_mm:.1f} mm
             </div>
         </div>
         <div style="text-align: right;">
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; font-weight: 700; color: #0F172A;">
-                <span style="color: #2563EB;">V_corte(GT) = {local_vol_cm3:.4f}</span> &nbsp;|&nbsp; <span style="color: #059669;">V_corte(IA) = {local_cad_vol_cm3:.4f} cm³</span>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.92rem; font-weight: 700; color: #1E40AF;">
+                Volumen de esta rebanada: {local_vol_cm3:.4f} cm³
             </div>
-            <div style="font-size: 0.72rem; color: #64748B;">
-                Volumen 3D Caso (Simpson 1/3): GT = {total_vol_cm3:.4f} cm³ vs IA = {cad_vol_cm3:.4f} cm³ (Error Caso: <strong>{case_vol_err_pct:.4f}%</strong>)
+            <div style="font-size: 0.74rem; color: #64748B;">
+                Representa el {pct_of_total:.2f}% del volumen total del tumor
             </div>
         </div>
     </div>
-    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 10px;">
-        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
-            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">1. Area Seccional (Green)</div>
-            <div style="font-size: 0.76rem; color: #1E40AF; margin-bottom: 2px;">Radiologo ({n_gt_pts} vert.): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">{cur_area:.4f} mm²</span></div>
-            <div style="font-size: 0.76rem; color: #065F46; margin-bottom: 2px;">Spline C² IA ({n_cv_pts} pts): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">{cv_area:.4f} mm²</span></div>
-            <div style="font-size: 0.72rem; color: #475569; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">&Delta;A: <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">{diff_mm2:+.4f} mm² ({diff_pct:+.4f}%)</span></div>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 12px;">
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-top: 3px solid #2563EB; border-radius: 6px; padding: 12px 14px;">
+            <div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 6px;">1. Area del Tumor en este Corte</div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.80rem; color: #1E40AF; margin-bottom: 4px;">
+                <span>Referencia Radiologo (Azul):</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">{cur_area:.4f} mm²</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.80rem; color: #065F46; margin-bottom: 4px;">
+                <span>Calculo Vision Artificial (Verde):</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">{cv_area:.4f} mm²</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.76rem; color: #334155; border-top: 1px solid #E2E8F0; padding-top: 4px; margin-top: 4px;">
+                <span>Diferencia de area:</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">{diff_mm2:+.4f} mm²</span>
+            </div>
         </div>
-        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
-            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">2. Porcentaje de Error (IA vs GT)</div>
-            <div style="font-size: 0.76rem; color: #334155; margin-bottom: 2px;">Error Relativo Corte: <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: {err_color};">{abs_err_pct:.4f}%</span></div>
-            <div style="font-size: 0.76rem; color: #334155; margin-bottom: 2px;">Exactitud del Corte: <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A;">{accuracy_pct:.4f}%</span></div>
-            <div style="font-size: 0.72rem; color: #475569; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">Error Volumetrico Caso: <strong>{case_vol_err_pct:.4f}%</strong> (Exact: {case_vol_acc_pct:.4f}%)</div>
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-top: 3px solid {err_color}; border-radius: 6px; padding: 12px 14px;">
+            <div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 6px;">2. Error y Exactitud en este Corte</div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.80rem; color: #334155; margin-bottom: 4px;">
+                <span>Porcentaje de Error del Corte:</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: {err_color};">{abs_err_pct:.4f}%</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.80rem; color: #334155; margin-bottom: 4px;">
+                <span>Exactitud en este Corte:</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A;">{accuracy_pct:.4f}%</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.76rem; color: #047857; border-top: 1px solid #E2E8F0; padding-top: 4px; margin-top: 4px;">
+                <span>Coincidencia de bordes (DICE):</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">{dice_pct:.4f}%</span>
+            </div>
         </div>
-        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
-            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">3. Particion y Senal FLAIR</div>
-            <div style="font-size: 0.75rem; color: #334155; margin-bottom: 2px;">Extra (FP): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #065F46;">{fp_val:.4f} mm² ({fp_pct:.4f}%)</span></div>
-            <div style="font-size: 0.75rem; color: #334155; margin-bottom: 2px;">Omitido (FN): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #B45309;">{fn_val:.4f} mm² ({fn_pct:.4f}%)</span></div>
-            <div style="font-size: 0.71rem; color: #64748B; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">FLAIR Nucleo: {f_core:.1f} | FP: {f_fp:.1f} | Sano: {f_healthy:.1f} u.i.</div>
-        </div>
-        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
-            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">4. Error de Borde y DICE</div>
-            <div style="font-size: 0.76rem; color: #334155; margin-bottom: 2px;">Error Espacial Borde: <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #1E40AF;">{border_err_pct:.4f}%</span></div>
-            <div style="font-size: 0.76rem; color: #334155; margin-bottom: 2px;">Precision DICE (F1): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A;">{dice_pct:.4f}%</span></div>
-            <div style="font-size: 0.72rem; color: #047857; font-weight: 600; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">Jaccard (IoU): {iou_pct:.4f}%</div>
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-top: 3px solid #059669; border-radius: 6px; padding: 12px 14px;">
+            <div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 6px;">3. Desglose de la Diferencia</div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.80rem; color: #334155; margin-bottom: 4px;">
+                <span>Borde tumoral adicional (IA):</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #065F46;">{fp_val:.4f} mm² ({fp_pct:.4f}%)</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.80rem; color: #334155; margin-bottom: 4px;">
+                <span>Borde oscuro descartado (IA):</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #B45309;">{fn_val:.4f} mm² ({fn_pct:.4f}%)</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.76rem; color: #64748B; border-top: 1px solid #E2E8F0; padding-top: 4px; margin-top: 4px;">
+                <span>Balance neto:</span>
+                <span style="font-family: 'JetBrains Mono', monospace;">{fp_val:.4f} &minus; {fn_val:.4f} = {diff_mm2:+.4f} mm²</span>
+            </div>
         </div>
     </div>
-    <div style="font-size: 0.75rem; color: #475569; padding-top: 6px; border-top: 1px solid #F1F5F9; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-        <span><strong>Metodo IA:</strong> Gradiente Direccional Espectral de Sobel (&minus;&nabla;&Psi;&middot;n) + Spline Cubico Periodico C² (Thomas O(N)).</span>
-        <span><strong>Continuidad axial:</strong> {trans_html}</span>
+    <div style="font-size: 0.78rem; color: #475569; padding-top: 8px; border-top: 1px solid #F1F5F9;">
+        <strong>Evolucion del area entre cortes contiguos:</strong> {trans_html}
     </div>
 </div>
 """).strip()

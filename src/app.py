@@ -63,12 +63,16 @@ def _verify_access_key(raw_key: str) -> bool:
     # Verificar clave personalizada en st.secrets si existe en Streamlit Cloud
     try:
         if "ACCESS_KEY" in st.secrets:
-            if hmac.compare_digest(candidate, str(st.secrets["ACCESS_KEY"])):
+            secret_val = str(st.secrets["ACCESS_KEY"]).strip()
+            if hmac.compare_digest(candidate, secret_val) or hmac.compare_digest(candidate.upper(), secret_val.upper()):
                 return True
     except Exception:
         pass
-    digest = hashlib.sha256(candidate.encode("utf-8")).hexdigest()
-    return any(hmac.compare_digest(digest, h) for h in VALID_KEY_HASHES)
+    for variant in (candidate, candidate.upper()):
+        digest = hashlib.sha256(variant.encode("utf-8")).hexdigest()
+        if any(hmac.compare_digest(digest, h) for h in VALID_KEY_HASHES):
+            return True
+    return False
 
 
 if "is_presentation_authenticated" not in st.session_state:
@@ -493,52 +497,40 @@ elif current_route == "Estacion PACS & Resultados":
             mean_iou_pct = ((mean_dice_val / (2.0 - mean_dice_val)) * 100.0) if (2.0 - mean_dice_val) > 0 else 100.0
 
             timestamp = packets[0].timestamp_utc if packets else "2026-11-06T12:00:00Z"
-            method_desc = "Simpson 1/3 compuesto (par)" if "Puro" in res_simpson.method_used else "Hibrido Simpson 1/3 + 3/8 (impar)"
+            method_desc = "Regla de Simpson 1/3 Compuesta" if "Puro" in res_simpson.method_used else "Cuadratura Hibrida Simpson 1/3 + 3/8"
 
-            col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
+            st.markdown(f"""
+            <div style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
+                Resumen del Estudio Completo 3D ({method_desc} en {res_simpson.num_slices} cortes &middot; espesor h = {res_simpson.slice_thickness_h:.1f} mm)
+            </div>
+            """, unsafe_allow_html=True)
+
+            col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
             with col_kpi1:
                 st.markdown(f"""
-                <div class="kpi-card">
-                    <div class="kpi-label">Volumen Radiologo (GT)</div>
-                    <div class="kpi-value">{vol_gt_cm3:.4f}<span class="kpi-unit">cm³</span></div>
-                    <div class="kpi-context">{method_desc} &middot; {res_simpson.num_slices} cortes (h={res_simpson.slice_thickness_h:.1f} mm)</div>
+                <div class="kpi-card" style="border-top: 3px solid #2563EB;">
+                    <div class="kpi-label" style="color: #1E40AF !important;">1. Volumen de Referencia (Radiologo &middot; Azul)</div>
+                    <div class="kpi-value" style="color: #1E40AF !important;">{vol_gt_cm3:.4f}<span class="kpi-unit">cm³</span></div>
+                    <div class="kpi-context">Integracion de las {res_simpson.num_slices} mascaras manuales del radiologo</div>
                 </div>
                 """, unsafe_allow_html=True)
             with col_kpi2:
                 st.markdown(f"""
-                <div class="kpi-card">
-                    <div class="kpi-label" style="color: #065F46 !important;">Volumen Vision Artificial (IA)</div>
+                <div class="kpi-card" style="border-top: 3px solid #059669;">
+                    <div class="kpi-label" style="color: #065F46 !important;">2. Volumen Calculado (Vision Artificial &middot; Verde)</div>
                     <div class="kpi-value" style="color: #059669 !important;">{vol_cad_cm3:.4f}<span class="kpi-unit">cm³</span></div>
-                    <div class="kpi-context">Spline Espectral C² &middot; &Delta;V = {vol_diff_cm3:+.4f} cm³</div>
+                    <div class="kpi-context">Integracion de nuestro algoritmo (Diferencia: <strong>{vol_diff_cm3:+.4f} cm³</strong>)</div>
                 </div>
                 """, unsafe_allow_html=True)
             with col_kpi3:
                 err_kpi_col = "#047857" if case_vol_err_pct <= 5.0 else "#B45309" if case_vol_err_pct <= 10.0 else "#B91C1C"
                 st.markdown(f"""
-                <div class="kpi-card">
-                    <div class="kpi-label">Error Volumetrico del Caso</div>
-                    <div class="kpi-value" style="color: {err_kpi_col} !important;">{case_vol_err_pct:.4f}<span class="kpi-unit">%</span></div>
-                    <div class="kpi-context">Exactitud volumetrica 3D: <strong>{case_vol_acc_pct:.4f}%</strong></div>
+                <div class="kpi-card" style="border-top: 3px solid {err_kpi_col};">
+                    <div class="kpi-label">3. Porcentaje de Error Global del Estudio</div>
+                    <div class="kpi-value" style="color: {err_kpi_col} !important;">{case_vol_err_pct:.4f}<span class="kpi-unit">% de error</span></div>
+                    <div class="kpi-context">Exactitud global: <strong>{case_vol_acc_pct:.4f}%</strong> &middot; Coincidencia media (DICE): <strong>{mean_dice_pct:.4f}%</strong></div>
                 </div>
                 """, unsafe_allow_html=True)
-            with col_kpi4:
-                st.markdown(f"""
-                <div class="kpi-card">
-                    <div class="kpi-label">Error Espacial de Borde (IA)</div>
-                    <div class="kpi-value" style="color: #1E40AF !important;">{case_border_err_pct:.4f}<span class="kpi-unit">%</span></div>
-                    <div class="kpi-context">DICE medio: <strong>{mean_dice_pct:.4f}%</strong> &middot; IoU: {mean_iou_pct:.4f}%</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            # Nota clinica explicativa para la evaluacion del profesor
-            st.markdown(f"""
-            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; font-size: 0.83rem; color: #334155; line-height: 1.55;">
-                <div style="font-weight: 700; color: #0F172A; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                    <strong>Interpretacion Clinica del Volumen FLAIR ({res_simpson.volume_cm3:.3f} cm3):</strong>
-                </div>
-                En resonancia magnetica axial <strong>FLAIR</strong>, la hiperintensidad parenquimatosa abarca el <strong>volumen de compromiso total</strong>: masa tumoral solida <em>mas el edema vasogenico perilesional expansivo</em>. Un volumen combinado de ~{res_simpson.volume_cm3:.1f} cm³ en un encefalo adulto (~1400 cm³) representa cerca del 9% del volumen intracraneal, explicando el <strong>efecto de masa severo, desplazamiento de la linea media y colapso de ventriculos laterales</strong> (Grado III Quirurgico Urgente).
-            </div>
-            """, unsafe_allow_html=True)
 
             render_clinical_workstation(
                 packets=packets,

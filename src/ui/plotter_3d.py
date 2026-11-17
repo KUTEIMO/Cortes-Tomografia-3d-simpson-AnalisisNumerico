@@ -142,8 +142,9 @@ def build_organic_surface_mesh(
                     z=orig_z_mm,
                     mode="lines",
                     line=dict(color="#101828" if "tumor" in contour_key else "#64748B", width=2.5),
-                    name=f"Contorno Corte {s.get('slice_index', idx)} (z={z_val:.1f}mm)",
-                    hovertemplate=f"Corte {s.get('slice_index', idx)}<br>z = {z_val:.2f} mm<br>Area = {s.get('area_mm2', 0.0):.1f} mm²<extra></extra>"
+                    name="Anillos Axiales de la Lesion",
+                    showlegend=(len(contour_traces) == 0),
+                    hovertemplate=f"Corte {s.get('slice_index', idx) + 1}<br>z = {z_val:.2f} mm<br>Area = {s.get('area_mm2', 0.0):.4f} mm²<extra></extra>"
                 )
             )
 
@@ -686,8 +687,8 @@ def create_2d_slice_view(
                 mode="lines+markers",
                 marker=dict(size=4, color="#2563EB"),
                 line=dict(color="#2563EB", width=2.4),
-                name="Mascara Radiologo (GT Manual)",
-                hovertemplate=f"Poligono Manual Radiologo (GT)<br>X = %{{x:.1f}} mm, Y = %{{y:.1f}} mm<br>Area = {area_mm2:.1f} mm²<extra></extra>"
+                name="Mascara Radiologo (Azul)",
+                hovertemplate=f"Referencia Radiologo (Azul)<br>X = %{{x:.2f}} mm, Y = %{{y:.2f}} mm<br>Area = {area_mm2:.4f} mm²<extra></extra>"
             )
         )
         cent_x_mm = float(cx_mm[:-1].mean())
@@ -698,18 +699,8 @@ def create_2d_slice_view(
                 mode="markers",
                 marker=dict(color="#F59E0B", size=8, symbol="circle"),
                 name="Centroide",
-                hovertemplate=f"Centroide Anatomico<br>X = {cent_x_mm:.1f} mm, Y = {cent_y_mm:.1f} mm<extra></extra>"
+                hovertemplate=f"Centroide Anatomico<br>X = {cent_x_mm:.2f} mm, Y = {cent_y_mm:.2f} mm<extra></extra>"
             )
-        )
-        fig.add_annotation(
-            x=min(cx_mm), y=max(cy_mm) + 6,
-            text=f"A(GT) = {area_mm2:.4f} mm²",
-            showarrow=False,
-            font=dict(size=11, color="#2563EB", family="Inter"),
-            bgcolor="rgba(255, 255, 255, 0.88)",
-            bordercolor="#2563EB",
-            borderwidth=1,
-            borderpad=3
         )
 
     # 2. Modo Vision Artificial Refinada (Segmentacion Espectral + Spline Cubico Sub-pixel en Esmeralda)
@@ -723,8 +714,8 @@ def create_2d_slice_view(
                     x=cx_mm, y=cy_mm,
                     mode="lines",
                     line=dict(color="#10B981", width=2.8),
-                    name="Spline Espectral IA (Sub-pixel C²)",
-                    hovertemplate=f"Spline Cubico Espectral IA<br>X = %{{x:.4f}} mm, Y = %{{y:.4f}} mm<br>Area = {active_area:.4f} mm²<extra></extra>"
+                    name="Calculo Vision Artificial (Verde)",
+                    hovertemplate=f"Calculo Vision Artificial (Verde)<br>X = %{{x:.2f}} mm, Y = %{{y:.2f}} mm<br>Area = {active_area:.4f} mm²<extra></extra>"
                 )
             )
             cent_x_mm = float(cx_mm[:-1].mean())
@@ -735,18 +726,8 @@ def create_2d_slice_view(
                     mode="markers",
                     marker=dict(color="#059669", size=8, symbol="circle"),
                     name="Centroide IA",
-                    hovertemplate=f"Centroide IA<br>X = {cent_x_mm:.4f} mm, Y = {cent_y_mm:.4f} mm<extra></extra>"
+                    hovertemplate=f"Centroide IA<br>X = {cent_x_mm:.2f} mm, Y = {cent_y_mm:.2f} mm<extra></extra>"
                 )
-            )
-            fig.add_annotation(
-                x=min(cx_mm), y=max(cy_mm) + 6,
-                text=f"A(Spline IA) = {active_area:.4f} mm²",
-                showarrow=False,
-                font=dict(size=11, color="#059669", family="Inter"),
-                bgcolor="rgba(255, 255, 255, 0.88)",
-                bordercolor="#059669",
-                borderwidth=1,
-                borderpad=3
             )
 
     # 3. Modo Auditoria Dual: Clinico vs IA (Contraste directo entre Poligono Discreto GT y Spline C² IA)
@@ -759,8 +740,8 @@ def create_2d_slice_view(
                     mode="lines+markers",
                     marker=dict(size=4, color="#3B82F6"),
                     line=dict(color="#2563EB", width=2.2),
-                    name="Mascara Radiologo (GT Manual)",
-                    hovertemplate=f"Mascara Radiologo (GT Manual)<br>X = %{{x:.4f}} mm, Y = %{{y:.4f}} mm<br>Area = {area_mm2:.4f} mm²<extra></extra>"
+                    name="Mascara Radiologo (Azul)",
+                    hovertemplate=f"Referencia Radiologo (Azul)<br>X = %{{x:.2f}} mm, Y = %{{y:.2f}} mm<br>Area = {area_mm2:.4f} mm²<extra></extra>"
                 )
             )
         if cv_contour_pts and len(cv_contour_pts) >= 4:
@@ -770,19 +751,9 @@ def create_2d_slice_view(
                     x=cv_x, y=cv_y,
                     mode="lines",
                     line=dict(color="#10B981", width=2.8),
-                    name="Spline Espectral IA (Sub-pixel C²)",
-                    hovertemplate=f"Spline Cubico Espectral IA<br>X = %{{x:.4f}} mm, Y = %{{y:.4f}} mm<br>Area = {cv_area_mm2:.4f} mm² (DICE {dice_score*100:.4f}%)<extra></extra>"
+                    name="Calculo Vision Artificial (Verde)",
+                    hovertemplate=f"Calculo Vision Artificial (Verde)<br>X = %{{x:.2f}} mm, Y = %{{y:.2f}} mm<br>Area = {cv_area_mm2:.4f} mm² (DICE {dice_score*100:.4f}%)<extra></extra>"
                 )
-            )
-            fig.add_annotation(
-                x=min(cv_x), y=max(cv_y) + 6,
-                text=f"GT: {area_mm2:.4f} | Spline IA: {cv_area_mm2:.4f} mm² (DICE {dice_score*100:.4f}%)",
-                showarrow=False,
-                font=dict(size=11, color="#0F172A", family="Inter"),
-                bgcolor="rgba(255, 255, 255, 0.90)",
-                bordercolor="#94A3B8",
-                borderwidth=1,
-                borderpad=3
             )
 
     # Determinar centroide del tumor para encuadres de aumento
@@ -858,7 +829,7 @@ def create_2d_slice_view(
         height=490,
         dragmode="pan",
         title=dict(
-            text=f"<b>Resonancia Magnetica Axial (FLAIR)</b><br><span style='font-size:11px;color:#64748B;'>Corte {slice_idx + 1} de {total_slices} | z = {active_z:.4f} mm | Area GT = {area_mm2:.4f} mm² | Area IA = {cv_area_mm2:.4f} mm²</span>",
+            text=f"<b>Resonancia Magnetica Axial (FLAIR)</b><br><span style='font-size:11px;color:#64748B;'>Corte {slice_idx + 1} de {total_slices} (z = {active_z:.1f} mm) &middot; <span style='color:#2563EB;font-weight:600;'>Radiologo (Azul): {area_mm2:.4f} mm²</span> &middot; <span style='color:#059669;font-weight:600;'>IA (Verde): {cv_area_mm2:.4f} mm²</span></span>",
             font=dict(size=12, family="Inter", color="#0F172A"),
             x=0.03,
             y=0.97
