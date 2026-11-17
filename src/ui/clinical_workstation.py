@@ -167,7 +167,7 @@ def render_clinical_workstation(
 
     with col_right:
         with st.container(border=True):
-            col_2d_title, col_2d_mode = st.columns([1.5, 1.5])
+            col_2d_title, col_2d_mode, col_2d_zoom = st.columns([1.3, 1.4, 1.1])
             with col_2d_title:
                 st.markdown(f"<div class='clinical-card-header' style='padding-top: 4px; margin-bottom: 0;'>Resonancia Axial FLAIR (Corte {selected_slice_1based}/{total_active_slices})</div>", unsafe_allow_html=True)
             with col_2d_mode:
@@ -179,6 +179,17 @@ def render_clinical_workstation(
                         "Auditoria Dual: Clinico vs IA",
                         "Resonancia Pura (FLAIR)",
                         "Mascara Radiologica"
+                    ],
+                    index=0,
+                    label_visibility="collapsed"
+                )
+            with col_2d_zoom:
+                zoom_mode = st.selectbox(
+                    "Escala Zoom",
+                    [
+                        "100% (Corte Completo)",
+                        "200% (Enfoque Lesion)",
+                        "300% (Detalle Borde)"
                     ],
                     index=0,
                     label_visibility="collapsed"
@@ -260,7 +271,8 @@ def render_clinical_workstation(
                 dice_score=dice_val,
                 fn_mm2=fn_val,
                 fp_mm2=fp_val,
-                view_mode=view_mode
+                view_mode=view_mode,
+                zoom_mode=zoom_mode
             )
 
             # Configuracion optimizada para control de zoom fluido y paneo sin saltos
@@ -272,11 +284,13 @@ def render_clinical_workstation(
                 "displaylogo": False,
                 "doubleClick": "reset"
             }
+            clean_zoom_tag = zoom_mode.split()[0].replace("%", "")
+            clean_view_tag = view_mode.split()[0]
             placeholder_2d.plotly_chart(
                 fig_2d,
                 width="stretch",
                 config=config_2d,
-                key=f"p2d_view_{idx}"
+                key=f"p2d_c_{idx}_{clean_zoom_tag}_{clean_view_tag}"
             )
 
             # =================================================================

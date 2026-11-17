@@ -599,7 +599,8 @@ def create_2d_slice_view(
     dice_score: float = 1.0,
     fn_mm2: float = 0.0,
     fp_mm2: float = 0.0,
-    view_mode: str = "Contorno Clinico (Cobalto)"
+    view_mode: str = "Contorno Clinico (Cobalto)",
+    zoom_mode: str = "100% (Corte Completo)"
 ) -> go.Figure:
     """
     Renderiza el visor bidimensional de resonancia magnetica con coordenadas milimetricas
@@ -741,13 +742,65 @@ def create_2d_slice_view(
                 borderpad=3
             )
 
-    # Marcadores anatomicos cardinales de orientacion clinica exacta
-    fig.add_annotation(x=0, y=half_h - 7, text="ANTERIOR (A) - CARA / FRENTE", showarrow=False, font=dict(color="#2563EB", size=10, family="Inter", weight="bold"))
-    fig.add_annotation(x=0, y=-half_h + 7, text="POSTERIOR (P) - OCCIPUCIO", showarrow=False, font=dict(color="#2563EB", size=10, family="Inter", weight="bold"))
-    fig.add_annotation(x=-half_w + 12, y=0, text="DERECHA (R)", showarrow=False, font=dict(color="#2563EB", size=10, family="Inter", weight="bold"))
-    fig.add_annotation(x=half_w - 12, y=0, text="IZQUIERDA (L)", showarrow=False, font=dict(color="#2563EB", size=10, family="Inter", weight="bold"))
+    # Determinar centroide del tumor para encuadres de aumento
+    cent_x = 0.0
+    cent_y = 0.0
+    has_centroid = False
+    active_for_centroid = contour_pts if (contour_pts and len(contour_pts) >= 4) else cv_contour_pts
+    if active_for_centroid and len(active_for_centroid) >= 4:
+        poly_arr = np.array(active_for_centroid, dtype=float)
+        cx_vals = (poly_arr[:, 0] - center_px) * pixel_spacing_mm
+        cy_vals = -(poly_arr[:, 1] - center_px) * pixel_spacing_mm
+        cent_x = float(cx_vals.mean())
+        cent_y = float(cy_vals.mean())
+        has_centroid = True
+
+    limit_full = max(half_w, half_h) + 6.0
+
+    if "200%" in zoom_mode and has_centroid:
+        span = 55.0
+        x_range = [cent_x - span, cent_x + span]
+        y_range = [cent_y - span, cent_y + span]
+    elif "300%" in zoom_mode and has_centroid:
+        span = 32.0
+        x_range = [cent_x - span, cent_x + span]
+        y_range = [cent_y - span, cent_y + span]
+    else:
+        x_range = [-limit_full, limit_full]
+        y_range = [-limit_full, limit_full]
+
+    # Marcadores anatomicos cardinales de orientacion clinica exacta fijados en los 4 bordes del visor
+    fig.add_annotation(
+        xref="paper", yref="paper", x=0.5, y=0.97,
+        text="ANTERIOR (A) - CARA",
+        showarrow=False,
+        font=dict(color="#2563EB", size=10, family="Inter", weight="bold"),
+        bgcolor="rgba(255, 255, 255, 0.85)"
+    )
+    fig.add_annotation(
+        xref="paper", yref="paper", x=0.5, y=0.03,
+        text="POSTERIOR (P) - OCCIPUCIO",
+        showarrow=False,
+        font=dict(color="#2563EB", size=10, family="Inter", weight="bold"),
+        bgcolor="rgba(255, 255, 255, 0.85)"
+    )
+    fig.add_annotation(
+        xref="paper", yref="paper", x=0.03, y=0.5,
+        text="DERECHA (R)",
+        showarrow=False,
+        font=dict(color="#2563EB", size=10, family="Inter", weight="bold"),
+        bgcolor="rgba(255, 255, 255, 0.85)"
+    )
+    fig.add_annotation(
+        xref="paper", yref="paper", x=0.97, y=0.5,
+        text="IZQUIERDA (L)",
+        showarrow=False,
+        font=dict(color="#2563EB", size=10, family="Inter", weight="bold"),
+        bgcolor="rgba(255, 255, 255, 0.85)"
+    )
 
     fig.update_layout(
+        height=510,
         dragmode="pan",
         title=dict(
             text=f"<b>Resonancia Magnetica Axial (FLAIR)</b><br><span style='font-size:11px;color:#64748B;'>Corte {slice_idx + 1} de {total_slices} | z = {active_z:.1f} mm | Area = {area_mm2:.1f} mm2</span>",
@@ -757,7 +810,7 @@ def create_2d_slice_view(
         ),
         xaxis=dict(
             title="Eje Sagital X (mm)",
-            range=[-half_w - 6, half_w + 6],
+            range=x_range,
             autorange=False,
             gridcolor=THEME_GRID,
             zeroline=False,
@@ -766,10 +819,8 @@ def create_2d_slice_view(
         ),
         yaxis=dict(
             title="Eje Coronal Y (mm)",
-            range=[-half_h - 6, half_h + 6],
+            range=y_range,
             autorange=False,
-            scaleanchor="x",
-            scaleratio=1,
             gridcolor=THEME_GRID,
             zeroline=False,
             color=THEME_MUTED,
