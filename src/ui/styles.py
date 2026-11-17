@@ -19,7 +19,7 @@ span[data-testid="stIconMaterial"], .material-icons, .material-symbols-rounded {
 }
 
 .stApp {
-    background-color: #F4F6FA !important;
+    background-color: #F8FAFC !important;
 }
 
 section[data-testid="stSidebar"] {

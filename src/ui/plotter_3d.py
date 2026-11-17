@@ -414,28 +414,29 @@ def create_3d_full_brain_visualization(
                 )
             )
 
-        # 3. Plano axial del corte activo
-        px = np.array([-90.0, 90.0, 90.0, -90.0])
-        py = np.array([-110.0, -110.0, 110.0, 110.0])
+        # 3. Plano axial del corte activo (marcador discreto de cota z)
+        px = np.array([-95.0, 95.0, 95.0, -95.0])
+        py = np.array([-115.0, -115.0, 115.0, 115.0])
         pz = np.full(4, cur_z)
         fig.add_trace(
             go.Mesh3d(
                 x=px, y=py, z=pz,
                 i=[0, 0], j=[1, 2], k=[2, 3],
-                color="#0EA5E9", opacity=0.18,
-                name=f"Plano Axial Activo (z = {cur_z:.1f} mm)"
+                color="#0EA5E9", opacity=0.08,
+                name=f"Plano Axial Activo (z = {cur_z:.1f} mm)",
+                hoverinfo="skip"
             )
         )
 
         # 4. Marcadores cardinales anatomicos en el plano 3D (orientacion 1:1 identica al corte 2D)
         fig.add_trace(
             go.Scatter3d(
-                x=[0, 0, -100, 100],
-                y=[100, -100, 0, 0],
+                x=[0, 0, -95, 95],
+                y=[115, -115, 0, 0],
                 z=[cur_z, cur_z, cur_z, cur_z],
                 mode="text",
-                text=["ANTERIOR (A)", "POSTERIOR (P)", "DERECHA (R)", "IZQUIERDA (L)"],
-                textfont=dict(color="#2563EB", size=10, family="Inter"),
+                text=["A", "P", "R", "L"],
+                textfont=dict(color="#2563EB", size=11, family="Inter"),
                 name="Orientacion Cardinal Anatomica",
                 hoverinfo="skip"
             )
@@ -533,18 +534,24 @@ def create_3d_full_brain_visualization(
 
     # Camara optimizada para coincidir al 100% con la orientacion axial de la RMN 2D
     # (Anterior arriba, Posterior abajo, Izquierda derecha, Derecha izquierda)
-    cam_aligned_top = dict(eye=dict(x=0.0, y=0.001, z=2.40), up=dict(x=0.0, y=1.0, z=0.0))
+    cam_aligned_top = dict(eye=dict(x=0.0, y=0.001, z=2.20), up=dict(x=0.0, y=1.0, z=0.0))
     cam_perspective = dict(eye=dict(x=1.75, y=1.75, z=1.20), up=dict(x=0.0, y=0.0, z=1.0))
     initial_cam = cam_aligned_top if single_slice_idx is not None else cam_perspective
 
+    scene_kwargs = dict(
+        xaxis=dict(title="X Sagital (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
+        yaxis=dict(title="Y Coronal (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
+        zaxis=dict(title="Z Axial (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
+        bgcolor=THEME_BG,
+        camera=initial_cam
+    )
+    if single_slice_idx is not None:
+        scene_kwargs["aspectmode"] = "manual"
+        scene_kwargs["aspectratio"] = dict(x=1.0, y=1.0, z=0.45)
+
     fig.update_layout(
-        scene=dict(
-            xaxis=dict(title="X Sagital (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
-            yaxis=dict(title="Y Coronal (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
-            zaxis=dict(title="Z Axial (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
-            bgcolor=THEME_BG,
-            camera=initial_cam
-        ),
+        height=490,
+        scene=scene_kwargs,
         updatemenus=[
             dict(
                 type="buttons",
@@ -609,6 +616,12 @@ def create_2d_slice_view(
     - Eje X: [-half_w, +half_w] mm (Derecha radiologica a la izquierda, Izquierda a la derecha).
     - Eje Y: [-half_h, +half_h] mm (Posterior/Occipucio abajo, Anterior/Cara/Ojos arriba).
     """
+    # Garantizar formato RGB de 3 canales
+    if len(img_rgb.shape) == 2:
+        img_rgb = np.stack([img_rgb] * 3, axis=-1)
+    elif img_rgb.shape[2] == 1:
+        img_rgb = np.repeat(img_rgb, 3, axis=2)
+
     h_img, w_img = img_rgb.shape[:2]
     center_px = matrix_dim / 2.0
     half_w = (w_img / 2.0) * pixel_spacing_mm
@@ -663,7 +676,7 @@ def create_2d_slice_view(
             x=min(cx_mm), y=max(cy_mm) + 6,
             text=f"A = {area_mm2:.1f} mm²",
             showarrow=False,
-            font=dict(size=12, color="#2563EB", family="Inter"),
+            font=dict(size=11, color="#2563EB", family="Inter"),
             bgcolor="rgba(255, 255, 255, 0.85)",
             bordercolor="#2563EB",
             borderwidth=1,
@@ -700,7 +713,7 @@ def create_2d_slice_view(
                 x=min(cx_mm), y=max(cy_mm) + 6,
                 text=f"A (IA) = {active_area:.1f} mm²",
                 showarrow=False,
-                font=dict(size=12, color="#059669", family="Inter"),
+                font=dict(size=11, color="#059669", family="Inter"),
                 bgcolor="rgba(255, 255, 255, 0.85)",
                 bordercolor="#059669",
                 borderwidth=1,
@@ -755,52 +768,64 @@ def create_2d_slice_view(
         cent_y = float(cy_vals.mean())
         has_centroid = True
 
-    limit_full = max(half_w, half_h) + 6.0
+    limit_full = 125.0
 
     if "200%" in zoom_mode and has_centroid:
-        span = 55.0
+        span = 65.0
         x_range = [cent_x - span, cent_x + span]
         y_range = [cent_y - span, cent_y + span]
     elif "300%" in zoom_mode and has_centroid:
-        span = 32.0
+        span = 40.0
         x_range = [cent_x - span, cent_x + span]
         y_range = [cent_y - span, cent_y + span]
     else:
         x_range = [-limit_full, limit_full]
         y_range = [-limit_full, limit_full]
 
-    # Marcadores anatomicos cardinales de orientacion clinica exacta fijados en los 4 bordes del visor
+    # Marcadores anatomicos cardinales discretos tipo PACS fijados en los 4 bordes del marco
     fig.add_annotation(
-        xref="paper", yref="paper", x=0.5, y=0.97,
-        text="ANTERIOR (A) - CARA",
+        xref="paper", yref="paper", x=0.5, y=0.985,
+        text="A",
         showarrow=False,
-        font=dict(color="#2563EB", size=10, family="Inter", weight="bold"),
-        bgcolor="rgba(255, 255, 255, 0.85)"
+        font=dict(color="#2563EB", size=11, family="Inter", weight="bold"),
+        bgcolor="rgba(255, 255, 255, 0.85)",
+        bordercolor="#E2E8F0",
+        borderwidth=1,
+        borderpad=2
     )
     fig.add_annotation(
-        xref="paper", yref="paper", x=0.5, y=0.03,
-        text="POSTERIOR (P) - OCCIPUCIO",
+        xref="paper", yref="paper", x=0.5, y=0.015,
+        text="P",
         showarrow=False,
-        font=dict(color="#2563EB", size=10, family="Inter", weight="bold"),
-        bgcolor="rgba(255, 255, 255, 0.85)"
+        font=dict(color="#2563EB", size=11, family="Inter", weight="bold"),
+        bgcolor="rgba(255, 255, 255, 0.85)",
+        bordercolor="#E2E8F0",
+        borderwidth=1,
+        borderpad=2
     )
     fig.add_annotation(
-        xref="paper", yref="paper", x=0.03, y=0.5,
-        text="DERECHA (R)",
+        xref="paper", yref="paper", x=0.015, y=0.5,
+        text="R",
         showarrow=False,
-        font=dict(color="#2563EB", size=10, family="Inter", weight="bold"),
-        bgcolor="rgba(255, 255, 255, 0.85)"
+        font=dict(color="#2563EB", size=11, family="Inter", weight="bold"),
+        bgcolor="rgba(255, 255, 255, 0.85)",
+        bordercolor="#E2E8F0",
+        borderwidth=1,
+        borderpad=2
     )
     fig.add_annotation(
-        xref="paper", yref="paper", x=0.97, y=0.5,
-        text="IZQUIERDA (L)",
+        xref="paper", yref="paper", x=0.985, y=0.5,
+        text="L",
         showarrow=False,
-        font=dict(color="#2563EB", size=10, family="Inter", weight="bold"),
-        bgcolor="rgba(255, 255, 255, 0.85)"
+        font=dict(color="#2563EB", size=11, family="Inter", weight="bold"),
+        bgcolor="rgba(255, 255, 255, 0.85)",
+        bordercolor="#E2E8F0",
+        borderwidth=1,
+        borderpad=2
     )
 
     fig.update_layout(
-        height=510,
+        height=490,
         dragmode="pan",
         title=dict(
             text=f"<b>Resonancia Magnetica Axial (FLAIR)</b><br><span style='font-size:11px;color:#64748B;'>Corte {slice_idx + 1} de {total_slices} | z = {active_z:.1f} mm | Area = {area_mm2:.1f} mm2</span>",
@@ -821,12 +846,14 @@ def create_2d_slice_view(
             title="Eje Coronal Y (mm)",
             range=y_range,
             autorange=False,
+            scaleanchor="x",
+            scaleratio=1,
             gridcolor=THEME_GRID,
             zeroline=False,
             color=THEME_MUTED,
             fixedrange=False
         ),
-        margin=dict(l=40, r=20, t=55, b=40),
+        margin=dict(l=35, r=20, t=50, b=35),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
         font=dict(family="Inter, sans-serif", color=THEME_TEXT)

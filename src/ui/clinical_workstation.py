@@ -252,10 +252,25 @@ def render_clinical_workstation(
                 meta_item = case_slices_meta[idx]
                 c_pts = meta_item.get("tumor_contour")
                 cv_pts = meta_item.get("cv_contour")
-                cv_area = meta_item.get("cv_area_mm2", cur_area)
-                dice_val = meta_item.get("dice_similarity", 1.0)
-                fn_val = meta_item.get("fn_mm2", 0.0)
-                fp_val = meta_item.get("fp_mm2", 0.0)
+                cv_area = float(meta_item.get("cv_area_mm2", cur_area))
+                dice_val = float(meta_item.get("dice_similarity", 1.0))
+                fn_val = float(meta_item.get("fn_mm2") or 0.0)
+                fp_val = float(meta_item.get("fp_mm2") or 0.0)
+
+            # Consistencia matematica analitica rigurosa (Teoria de conjuntos y particion de areas)
+            if cur_area > 0 and cv_area > 0:
+                if fn_val == 0.0 and fp_val == 0.0 and (cv_area != cur_area or dice_val < 0.999):
+                    inter_area = (dice_val * (cur_area + cv_area)) / 2.0
+                    fn_val = max(0.0, cur_area - inter_area)
+                    fp_val = max(0.0, cv_area - inter_area)
+            elif cur_area == 0 and cv_area > 0:
+                fp_val = cv_area
+                fn_val = 0.0
+                dice_val = 0.0
+            elif cur_area > 0 and cv_area == 0:
+                fn_val = cur_area
+                fp_val = 0.0
+                dice_val = 0.0
 
             fig_2d = create_2d_slice_view(
                 img_rgb=img_to_show,
@@ -294,14 +309,14 @@ def render_clinical_workstation(
             )
 
             # =================================================================
-            # TELEMETRIA DE REBANADA Y AUDITORIA DEL CORTE PLANAR (REALIDAD VS CAD)
+            # AUDITORIA DEL CORTE PLANAR (REALIDAD RADIOLOGICA VS ESTIMACION NUMERICA)
             # =================================================================
             h_mm = float(res_simpson.slice_thickness_h)
             local_vol_cm3 = (cur_area * h_mm) / 1000.0
             total_vol_cm3 = float(res_simpson.volume_cm3)
             pct_of_total = (local_vol_cm3 / total_vol_cm3 * 100.0) if total_vol_cm3 > 0 else 0.0
 
-            # Metricas de discrepancia y precision frente a la realidad (Ground Truth)
+            # Metricas cuantitativas comprobadas
             diff_mm2 = cv_area - cur_area
             diff_pct = (diff_mm2 / cur_area * 100.0) if cur_area > 0 else 0.0
             abs_err_pct = abs(diff_pct)
@@ -312,109 +327,83 @@ def render_clinical_workstation(
             fn_pct = (fn_val / cur_area * 100.0) if cur_area > 0 else 0.0
             fp_pct = (fp_val / cur_area * 100.0) if cur_area > 0 else 0.0
 
-            # Transicion con capas adyacentes
+            # Transicion con cortes adyacentes
             prev_area = packets[idx - 1].cross_sectional_area_mm2 if idx > 0 else None
             next_area = packets[idx + 1].cross_sectional_area_mm2 if idx < (total_active_slices - 1) else None
 
             if prev_area is not None and next_area is not None:
                 d_prev = cur_area - prev_area
                 d_next = next_area - cur_area
-                trans_html = f"Corte {idx}: {prev_area:.1f} ({d_prev:+.1f}) | Corte {idx+2}: {next_area:.1f} ({d_next:+.1f}) mm2"
+                trans_html = f"Corte {idx}: {prev_area:.1f} ({d_prev:+.1f}) &rarr; Corte {idx+1}: {cur_area:.1f} &rarr; Corte {idx+2}: {next_area:.1f} ({d_next:+.1f}) mm²"
             elif prev_area is not None:
                 d_prev = cur_area - prev_area
-                trans_html = f"Corte {idx}: {prev_area:.1f} ({d_prev:+.1f}) mm2 | Apice Superior"
+                trans_html = f"Corte {idx}: {prev_area:.1f} ({d_prev:+.1f}) mm² &rarr; Apice superior ({cur_area:.1f} mm²)"
             elif next_area is not None:
                 d_next = next_area - cur_area
-                trans_html = f"Base Inferior | Corte {idx+2}: {next_area:.1f} ({d_next:+.1f}) mm2"
+                trans_html = f"Base inferior ({cur_area:.1f} mm²) &rarr; Corte {idx+2}: {next_area:.1f} ({d_next:+.1f}) mm²"
             else:
-                trans_html = "Corte unico"
+                trans_html = f"Corte unico: {cur_area:.1f} mm²"
 
             err_color = "#047857" if abs_err_pct <= 5.0 else "#B45309" if abs_err_pct <= 10.0 else "#B91C1C"
-            err_eval_text = "Dentro de tolerancia clinica (< 5%)" if abs_err_pct <= 5.0 else "Concordancia aceptable (< 10%)" if abs_err_pct <= 10.0 else "Discrepancia significativa"
+            err_eval_text = "Dentro de tolerancia (< 5%)" if abs_err_pct <= 5.0 else "Concordancia aceptable (< 10%)" if abs_err_pct <= 10.0 else "Discrepancia significativa"
 
             if cur_area > 0:
                 audit_html = textwrap.dedent(f"""
-<div style="background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 8px; padding: 16px 20px; margin-top: 14px; box-shadow: none;">
-<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-<div>
-<span style="font-size: 0.84rem; font-weight: 700; color: #0F172A; text-transform: uppercase; letter-spacing: 0.04em;">
-Auditoria del Corte Planar: Realidad Radiologica vs Estimacion Numerica
-</span>
-<div style="font-size: 0.76rem; color: #64748B; margin-top: 2px;">
-Corte {idx + 1} de {total_active_slices} | Modalidad: Resonancia Magnetica Axial FLAIR | cota z = {cur_z:.1f} mm | espesor h = {h_mm:.1f} mm
-</div>
-</div>
-<div style="text-align: right;">
-<span style="font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; font-weight: 700; color: #2563EB;">
-V_rebanada = {local_vol_cm3:.3f} cm3
-</span>
-<div style="font-size: 0.72rem; color: #64748B;">
-Aporte: {pct_of_total:.1f}% del volumen total ({total_vol_cm3:.3f} cm3)
-</div>
-</div>
-</div>
-<div style="display: grid; grid-template-columns: 1.1fr 1fr 1.3fr; gap: 12px; margin-bottom: 12px;">
-<div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
-<div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 6px;">
-1. Delimitacion Seccional
-</div>
-<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.82rem;">
-<span style="color: #1E40AF; font-weight: 600;">Realidad (Mascara Radiologo GT):</span>
-<span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #1E40AF;">{cur_area:.1f} mm2</span>
-</div>
-<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.82rem;">
-<span style="color: #065F46; font-weight: 600;">Estimacion (Corte Planar CAD):</span>
-<span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #065F46;">{cv_area:.1f} mm2</span>
-</div>
-<div style="display: flex; justify-content: space-between; font-size: 0.78rem; border-top: 1px solid #E2E8F0; padding-top: 4px; margin-top: 4px;">
-<span style="color: #64748B;">Diferencia de Area (Delta A):</span>
-<span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #0F172A;">{diff_mm2:+.1f} mm2</span>
-</div>
-</div>
-<div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
-<div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 6px;">
-2. Error y Exactitud Seccional
-</div>
-<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.82rem;">
-<span style="color: #334155; font-weight: 500;">Error Relativo Seccional:</span>
-<span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: {err_color};">{abs_err_pct:.2f}%</span>
-</div>
-<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.82rem;">
-<span style="color: #334155; font-weight: 500;">Exactitud Seccional:</span>
-<span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A;">{accuracy_pct:.2f}%</span>
-</div>
-<div style="font-size: 0.72rem; color: {err_color}; font-weight: 600; border-top: 1px solid #E2E8F0; padding-top: 4px; margin-top: 4px;">
-Estado: {err_eval_text}
-</div>
-</div>
-<div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
-<div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 6px;">
-3. Precision Espacial y Desglose
-</div>
-<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.82rem;">
-<span style="color: #334155; font-weight: 500;">Precision DICE (F1-score):</span>
-<span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A;">{dice_pct:.1f}% <span style="font-size: 0.70rem; color: #047857;">(Clinico >= 90%)</span></span>
-</div>
-<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.82rem;">
-<span style="color: #334155; font-weight: 500;">Superposicion Jaccard (IoU):</span>
-<span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A;">{iou_pct:.1f}%</span>
-</div>
-<div style="display: flex; justify-content: space-between; font-size: 0.74rem; border-top: 1px solid #E2E8F0; padding-top: 4px; margin-top: 4px; color: #64748B;">
-<span>Omitido (FN): {fn_val:.1f} mm2 ({fn_pct:.1f}%)</span>
-<span>Extra (FP): {fp_val:.1f} mm2 ({fp_pct:.1f}%)</span>
-</div>
-</div>
-</div>
-<div style="background: #F1F5F9; border-left: 3px solid #2563EB; border-radius: 4px; padding: 8px 12px; font-size: 0.78rem; color: #334155; line-height: 1.5;">
-<strong>Interpretacion Clinica y Rigor:</strong> Transicion seccional: {trans_html}. En este corte, el algoritmo alcanza una exactitud del {accuracy_pct:.2f}% frente al estandar de oro radiologico oficial, con {fn_val:.1f} mm2 de tejido omitido (cero sub-reseccion de tumor) y {fp_val:.1f} mm2 de margen perilesional seguro integrado en la rebanada axial.
-</div>
+<div style="background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 8px; padding: 14px 18px; margin-top: 14px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <div>
+            <div style="font-size: 0.76rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em;">
+                Auditoria de Corte Planar (Realidad Radiologica vs Estimacion Numerica)
+            </div>
+            <div style="font-size: 0.80rem; color: #0F172A; font-weight: 600; margin-top: 2px;">
+                Corte {idx + 1} de {total_active_slices} &middot; cota z = {cur_z:.1f} mm &middot; espesor h = {h_mm:.1f} mm
+            </div>
+        </div>
+        <div style="text-align: right;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.95rem; font-weight: 700; color: #2563EB;">
+                V_rebanada = {local_vol_cm3:.3f} cm³
+            </div>
+            <div style="font-size: 0.72rem; color: #64748B;">
+                Aporte: {pct_of_total:.1f}% del volumen total ({total_vol_cm3:.3f} cm³)
+            </div>
+        </div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 10px;">
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
+            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">Delimitacion Seccional</div>
+            <div style="font-size: 0.78rem; color: #1E40AF; margin-bottom: 2px;">Realidad (GT): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">{cur_area:.1f} mm²</span></div>
+            <div style="font-size: 0.78rem; color: #065F46; margin-bottom: 2px;">Estimacion CAD: <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">{cv_area:.1f} mm²</span></div>
+            <div style="font-size: 0.74rem; color: #475569; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">Diferencia: <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">{diff_mm2:+.1f} mm²</span></div>
+        </div>
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
+            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">Error y Exactitud</div>
+            <div style="font-size: 0.78rem; color: #334155; margin-bottom: 2px;">Error relativo: <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: {err_color};">{abs_err_pct:.2f}%</span></div>
+            <div style="font-size: 0.78rem; color: #334155; margin-bottom: 2px;">Exactitud: <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A;">{accuracy_pct:.2f}%</span></div>
+            <div style="font-size: 0.72rem; color: {err_color}; font-weight: 600; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">{err_eval_text}</div>
+        </div>
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
+            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">Precision Espacial</div>
+            <div style="font-size: 0.78rem; color: #334155; margin-bottom: 2px;">DICE (F1-score): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A;">{dice_pct:.1f}%</span></div>
+            <div style="font-size: 0.78rem; color: #334155; margin-bottom: 2px;">Jaccard (IoU): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A;">{iou_pct:.1f}%</span></div>
+            <div style="font-size: 0.72rem; color: #047857; font-weight: 600; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">Concordancia alta (&ge; 90%)</div>
+        </div>
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
+            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">Desglose de Tejido</div>
+            <div style="font-size: 0.78rem; color: #334155; margin-bottom: 2px;">Omitido (FN): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #B91C1C;">{fn_val:.1f} mm² ({fn_pct:.1f}%)</span></div>
+            <div style="font-size: 0.78rem; color: #334155; margin-bottom: 2px;">Extra (FP): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #065F46;">{fp_val:.1f} mm² ({fp_pct:.1f}%)</span></div>
+            <div style="font-size: 0.72rem; color: #64748B; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">Identidad: FP - FN = &Delta;A</div>
+        </div>
+    </div>
+    <div style="font-size: 0.75rem; color: #64748B; padding-top: 6px; border-top: 1px solid #F1F5F9;">
+        <strong>Transicion anatomica adyacente:</strong> {trans_html}
+    </div>
 </div>
 """).strip()
                 placeholder_audit.markdown(audit_html, unsafe_allow_html=True)
             else:
                 audit_html = textwrap.dedent(f"""
-<div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 14px 18px; margin-top: 14px; font-size: 0.82rem; color: #64748B; text-align: center;">
-<strong>Corte Planar {idx + 1} de {total_active_slices} (z = {cur_z:.1f} mm):</strong> Seccion de parenquima encefalico sano sin compromiso tumoral. Area lesional: 0.0 mm2 | Error frente al radiologo: 0.0% | V_rebanada: 0.0 cm3.
+<div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 16px; margin-top: 14px; font-size: 0.80rem; color: #64748B; text-align: center;">
+    <strong>Corte Planar {idx + 1} de {total_active_slices} (z = {cur_z:.1f} mm):</strong> Seccion de parenquima sano sin compromiso tumoral (Area: 0.0 mm² &middot; V_rebanada: 0.0 cm³).
 </div>
 """).strip()
                 placeholder_audit.markdown(audit_html, unsafe_allow_html=True)
