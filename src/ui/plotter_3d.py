@@ -41,7 +41,7 @@ def generate_brain_cortex_coordinates(n_u: int = 45, n_v: int = 35) -> Tuple[np.
     v = np.linspace(0, 2 * np.pi, n_v)
     u_grid, v_grid = np.meshgrid(u, v)
 
-    rx, ry, rz = 66.0, 84.0, 56.0
+    rx, ry, rz = 84.0, 98.0, 62.0
     x = rx * np.sin(u_grid) * np.cos(v_grid)
     y = ry * np.sin(u_grid) * np.sin(v_grid)
     z = rz * np.cos(u_grid)
@@ -188,8 +188,8 @@ def build_organic_surface_mesh(
         # Cierre anatomico de la boveda craneal (calvaria superior y base de craneo)
         top_cent = aligned_layers[-1].mean(axis=0)
         top_pts = aligned_layers[-1]
-        dome_ring_pts = top_cent + (top_pts - top_cent) * 0.58
-        z_dome = z_levels[-1] + 7.0
+        dome_ring_pts = top_cent + (top_pts - top_cent) * 0.72
+        z_dome = z_levels[-1] + 8.0
 
         dome_start = len(all_x)
         for pt in dome_ring_pts:
@@ -200,12 +200,12 @@ def build_organic_surface_mesh(
         top_apex_idx = len(all_x)
         all_x.append((top_cent[0] - center_px) * pixel_spacing_mm)
         all_y.append(-(top_cent[1] - center_px) * pixel_spacing_mm)
-        all_z.append(z_levels[-1] + 13.5)
+        all_z.append(z_levels[-1] + 15.0)
 
         bot_cent = aligned_layers[0].mean(axis=0)
         bot_pts = aligned_layers[0]
-        base_ring_pts = bot_cent + (bot_pts - bot_cent) * 0.65
-        z_base_ring = z_levels[0] - 6.5
+        base_ring_pts = bot_cent + (bot_pts - bot_cent) * 0.76
+        z_base_ring = z_levels[0] - 8.0
 
         base_start = len(all_x)
         for pt in base_ring_pts:
@@ -703,7 +703,7 @@ def create_2d_slice_view(
         )
         fig.add_annotation(
             x=min(cx_mm), y=max(cy_mm) + 6,
-            text=f"A(GT) = {area_mm2:.1f} mm²",
+            text=f"A(GT) = {area_mm2:.4f} mm²",
             showarrow=False,
             font=dict(size=11, color="#2563EB", family="Inter"),
             bgcolor="rgba(255, 255, 255, 0.88)",
@@ -724,7 +724,7 @@ def create_2d_slice_view(
                     mode="lines",
                     line=dict(color="#10B981", width=2.8),
                     name="Spline Espectral IA (Sub-pixel C²)",
-                    hovertemplate=f"Spline Cubico Espectral IA<br>X = %{{x:.2f}} mm, Y = %{{y:.2f}} mm<br>Area = {active_area:.1f} mm²<extra></extra>"
+                    hovertemplate=f"Spline Cubico Espectral IA<br>X = %{{x:.4f}} mm, Y = %{{y:.4f}} mm<br>Area = {active_area:.4f} mm²<extra></extra>"
                 )
             )
             cent_x_mm = float(cx_mm[:-1].mean())
@@ -735,12 +735,12 @@ def create_2d_slice_view(
                     mode="markers",
                     marker=dict(color="#059669", size=8, symbol="circle"),
                     name="Centroide IA",
-                    hovertemplate=f"Centroide IA<br>X = {cent_x_mm:.1f} mm, Y = {cent_y_mm:.1f} mm<extra></extra>"
+                    hovertemplate=f"Centroide IA<br>X = {cent_x_mm:.4f} mm, Y = {cent_y_mm:.4f} mm<extra></extra>"
                 )
             )
             fig.add_annotation(
                 x=min(cx_mm), y=max(cy_mm) + 6,
-                text=f"A(Spline IA) = {active_area:.1f} mm²",
+                text=f"A(Spline IA) = {active_area:.4f} mm²",
                 showarrow=False,
                 font=dict(size=11, color="#059669", family="Inter"),
                 bgcolor="rgba(255, 255, 255, 0.88)",
@@ -760,7 +760,7 @@ def create_2d_slice_view(
                     marker=dict(size=4, color="#3B82F6"),
                     line=dict(color="#2563EB", width=2.2),
                     name="Mascara Radiologo (GT Manual)",
-                    hovertemplate=f"Mascara Radiologo (GT Manual)<br>X = %{{x:.1f}} mm, Y = %{{y:.1f}} mm<br>Area = {area_mm2:.1f} mm²<extra></extra>"
+                    hovertemplate=f"Mascara Radiologo (GT Manual)<br>X = %{{x:.4f}} mm, Y = %{{y:.4f}} mm<br>Area = {area_mm2:.4f} mm²<extra></extra>"
                 )
             )
         if cv_contour_pts and len(cv_contour_pts) >= 4:
@@ -771,12 +771,12 @@ def create_2d_slice_view(
                     mode="lines",
                     line=dict(color="#10B981", width=2.8),
                     name="Spline Espectral IA (Sub-pixel C²)",
-                    hovertemplate=f"Spline Cubico Espectral IA<br>X = %{{x:.2f}} mm, Y = %{{y:.2f}} mm<br>Area = {cv_area_mm2:.1f} mm² (DICE {dice_score*100:.1f}%)<extra></extra>"
+                    hovertemplate=f"Spline Cubico Espectral IA<br>X = %{{x:.4f}} mm, Y = %{{y:.4f}} mm<br>Area = {cv_area_mm2:.4f} mm² (DICE {dice_score*100:.4f}%)<extra></extra>"
                 )
             )
             fig.add_annotation(
                 x=min(cv_x), y=max(cv_y) + 6,
-                text=f"GT: {area_mm2:.1f} | Spline IA: {cv_area_mm2:.1f} mm² (DICE {dice_score*100:.1f}%)",
+                text=f"GT: {area_mm2:.4f} | Spline IA: {cv_area_mm2:.4f} mm² (DICE {dice_score*100:.4f}%)",
                 showarrow=False,
                 font=dict(size=11, color="#0F172A", family="Inter"),
                 bgcolor="rgba(255, 255, 255, 0.90)",
@@ -858,7 +858,7 @@ def create_2d_slice_view(
         height=490,
         dragmode="pan",
         title=dict(
-            text=f"<b>Resonancia Magnetica Axial (FLAIR)</b><br><span style='font-size:11px;color:#64748B;'>Corte {slice_idx + 1} de {total_slices} | z = {active_z:.1f} mm | Area GT = {area_mm2:.1f} mm² | Area IA = {cv_area_mm2:.1f} mm²</span>",
+            text=f"<b>Resonancia Magnetica Axial (FLAIR)</b><br><span style='font-size:11px;color:#64748B;'>Corte {slice_idx + 1} de {total_slices} | z = {active_z:.4f} mm | Area GT = {area_mm2:.4f} mm² | Area IA = {cv_area_mm2:.4f} mm²</span>",
             font=dict(size=12, family="Inter", color="#0F172A"),
             x=0.03,
             y=0.97

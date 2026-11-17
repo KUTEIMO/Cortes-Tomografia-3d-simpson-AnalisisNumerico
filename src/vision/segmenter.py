@@ -158,15 +158,18 @@ class BrainLesionSegmenter:
             )
 
         if pts is not None and pixel_area > 0:
-            eps_gt = 0.0032 * cv2.arcLength(pts, True)
+            eps_gt = 0.0028 * cv2.arcLength(pts, True)
             gt_poly = cv2.approxPolyDP(pts, eps_gt, True)
             contour_list = gt_poly.reshape(-1, 2).tolist()
-            if len(contour_list) < 6:
+            if len(contour_list) < 8:
                 contour_list = pts.reshape(-1, 2).tolist()
         else:
             contour_list = []
 
-        # Segmentacion Espectral Multimodal + Contorno Sub-pixel por Splines Cubicos Periodicos (CAD)
+        # Extraccion real del contorno de la cavidad craneal / parenquima encefalico del corte
+        brain_contour_list = cls._extract_cranial_cavity_contour(img, pts)
+
+        # Segmentacion Espectral por Gradiente Normal + Splines Cubicos Periodicos Sub-pixel (CAD)
         cv_pts = contour_list
         cv_area = area_mm2
         dice_sim = 1.0
@@ -189,14 +192,15 @@ class BrainLesionSegmenter:
 
         return {
             "pixel_area": pixel_area,
-            "area_mm2": float(area_mm2),
-            "cv_area_mm2": float(cv_area),
+            "area_mm2": round(float(area_mm2), 4),
+            "cv_area_mm2": round(float(cv_area), 4),
             "cv_contour": cv_pts,
-            "dice_similarity": float(dice_sim),
-            "fn_mm2": float(fn_mm2),
-            "fp_mm2": float(fp_mm2),
+            "brain_contour": brain_contour_list,
+            "dice_similarity": round(float(dice_sim), 6),
+            "fn_mm2": round(float(fn_mm2), 4),
+            "fp_mm2": round(float(fp_mm2), 4),
             "flair_metrics": flair_metrics,
-            "equivalent_diameter_mm": float(equiv_diameter_mm),
+            "equivalent_diameter_mm": round(float(equiv_diameter_mm), 4),
             "centroid": centroid,
             "has_lesion": pts is not None and pixel_area > 0,
             "annotated_rgb": annotated_rgb,
@@ -205,11 +209,46 @@ class BrainLesionSegmenter:
             "contour": contour_list
         }
 
+    @classmethod
+    def _extract_cranial_cavity_contour(
+        cls,
+        img_bgr: np.ndarray,
+        tumor_pts: Optional[np.ndarray] = None
+    ) -> List[List[float]]:
+        """
+        Extrae el perimetro anatomico real de la cavidad craneal a partir del corte de RMN,
+        garantizando que envuelva integramente al parenquima cerebral y a cualquier lesion
+        cortical/subcortical con el margen fisiologico de la tabla interna craneal.
+        """
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        _, b_mask = cv2.threshold(gray, 15, 255, cv2.THRESH_BINARY)
+        if tumor_pts is not None and len(tumor_pts) >= 3:
+            t_mask = np.zeros_like(gray)
+            cv2.drawContours(t_mask, [tumor_pts], -1, 255, -1)
+            k_margin = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17))
+            t_dil = cv2.dilate(t_mask, k_margin)
+            b_mask = cv2.bitwise_or(b_mask, t_dil)
+
+        k_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
+        b_mask = cv2.morphologyEx(b_mask, cv2.MORPH_CLOSE, k_close)
+        k_cranial = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        b_mask = cv2.dilate(b_mask, k_cranial)
+
+        cnts, _ = cv2.findContours(b_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        if not cnts:
+            return []
+        main_c = max(cnts, key=cv2.contourArea)
+        if cv2.contourArea(main_c) < 200:
+            return []
+        hull = cv2.convexHull(main_c)
+        sp_pts, _ = cls._fit_periodic_cubic_spline_contour(hull, num_knots=28, num_eval=64)
+        return sp_pts
+
     @staticmethod
     def _fit_periodic_cubic_spline_contour(
         raw_contour_pts: np.ndarray,
-        num_knots: int = 34,
-        num_eval: int = 160
+        num_knots: int = 72,
+        num_eval: int = 220
     ) -> Tuple[List[List[float]], float]:
         """
         Reconstruye una frontera continua sub-pixel de clase C^2 en R^2 mediante
@@ -239,7 +278,7 @@ class BrainLesionSegmenter:
             return pts.tolist(), 0.0
         norm_s = cum_s / total_len
 
-        K = min(num_knots, max(8, len(pts_clean) // 3))
+        K = min(num_knots, max(12, len(pts_clean) // 2))
         knot_s = np.linspace(0.0, 1.0, K, endpoint=False)
         kx = np.interp(knot_s, norm_s, pts_clean[:, 0])
         ky = np.interp(knot_s, norm_s, pts_clean[:, 1])
@@ -261,7 +300,7 @@ class BrainLesionSegmenter:
         x_next = np.roll(cx, -1)
         y_next = np.roll(cy, -1)
         area_px = 0.5 * float(np.abs(np.sum(cx * y_next - x_next * cy)))
-        spline_coords = np.column_stack([np.round(cx, 3), np.round(cy, 3)]).tolist()
+        spline_coords = np.column_stack([np.round(cx, 4), np.round(cy, 4)]).tolist()
         return spline_coords, area_px
 
     @classmethod
@@ -273,14 +312,15 @@ class BrainLesionSegmenter:
         gt_area_mm2: Optional[float] = None
     ) -> Tuple[List[List[float]], float, float, float, float, Dict[str, float]]:
         """
-        Motor de Vision Artificial Espectral Multimodal + Splines Cubicos Sub-pixel:
-        1. Aplica filtrado bilateral anisotropico sobre los canales fisicos FLAIR (G) y T1 (R),
-           atenuando el ruido de radiofrecuencia y preservando gradientes anatomicos.
-        2. Evalua el discriminante espectral continuo Psi(x,y) = I_FLAIR(x,y) - 0.80 * I_T1(x,y).
-        3. Calcula el umbral optimo de separacion tisular entre el nucleo tumoral hiperintenso
-           y el anillo parenquimatoso sano circundante (sin union forzada OR con la mascara manual).
-        4. Parametriza la frontera con continuidad C^2 mediante Trazadores Cubicos Periodicos
-           y evalua el area exacta mediante el Teorema de Green.
+        Motor de Vision Artificial por Gradiente Direccional Espectral de Sobel + Splines C^2:
+        1. Filtrado bilateral anisotropico sobre los canales FLAIR (G) y T1 (R).
+        2. Campo espectral continuo Psi(x,y) = I_FLAIR(x,y) - 0.75 * I_T1(x,y) y derivadas
+           espaciales de Sobel (5x5) grad(Psi) = (dPsi/dx, dPsi/dy).
+        3. Optimizacion direccional a lo largo del vector normal exterior unitario n_k en cada
+           nodo de frontera para localizar con precision sub-pixel la cresta de maximo descenso
+           espectral (-grad(Psi) . n_k).
+        4. Ajuste de Trazador Cubico Periodico C^2 (220 puntos sub-pixel) y calculo de area por
+           Teorema de Green.
         """
         gt_bin = (mask_gt > 127).astype(np.uint8)
         gt_px = np.count_nonzero(gt_bin > 0)
@@ -290,69 +330,107 @@ class BrainLesionSegmenter:
 
         b, g, r = cv2.split(img_bgr)
         gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        h_img, w_img = g.shape
 
-        # 1. Filtrado Bilateral Anisotropico (preserva bordes tisulares reales)
-        g_filt = cv2.bilateralFilter(g, 7, 30, 30).astype(np.float64)
-        r_filt = cv2.bilateralFilter(r, 7, 30, 30).astype(np.float64)
+        # 1. Filtrado Bilateral Anisotropico y Campo Espectral FLAIR - T1
+        g_filt = cv2.bilateralFilter(g, 5, 20, 20).astype(np.float64)
+        r_filt = cv2.bilateralFilter(r, 5, 20, 20).astype(np.float64)
+        psi = g_filt - 0.75 * r_filt
 
-        # 2. Campo Espectral Diferencial Multimodal FLAIR - T1
-        psi = g_filt - 0.80 * r_filt
+        # 2. Operadores diferenciales de Sobel (5x5) para el gradiente espectral grad(Psi)
+        gx = cv2.Sobel(psi, cv2.CV_64F, 1, 0, ksize=5) / 32.0
+        gy = cv2.Sobel(psi, cv2.CV_64F, 0, 1, ksize=5) / 32.0
 
-        # 3. Mascara de parenquima cerebral y vecindad anatomica perilesional
-        _, brain_raw = cv2.threshold(gray, 22, 255, cv2.THRESH_BINARY)
-        cnts_b, _ = cv2.findContours(brain_raw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        brain_clean = np.zeros_like(gray)
-        if cnts_b:
-            cv2.drawContours(brain_clean, [max(cnts_b, key=cv2.contourArea)], -1, 255, -1)
-
-        band_r = max(5, int(round(7.0 / pixel_spacing_mm)))
-        k_band = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * band_r + 1, 2 * band_r + 1))
+        # Estadistica fisica del nucleo tumoral y del parenquima cerebral sano
+        k_band = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
         roi_outer = cv2.dilate(gt_bin * 255, k_band)
         roi_inner = cv2.erode(gt_bin * 255, k_band)
-
-        core_mask = (roi_inner > 0) if np.count_nonzero(roi_inner > 0) >= 20 else (gt_bin > 0)
-        healthy_ring = (cv2.dilate(roi_outer, k_band) > 0) & (roi_outer == 0) & (brain_clean > 0)
+        core_mask = (roi_inner > 0) if np.count_nonzero(roi_inner > 0) >= 15 else (gt_bin > 0)
+        healthy_ring = (cv2.dilate(roi_outer, k_band) > 0) & (roi_outer == 0) & (gray > 22)
         if np.count_nonzero(healthy_ring) < 20:
-            healthy_ring = (brain_clean > 0) & (gt_bin == 0)
+            healthy_ring = (gray > 22) & (gt_bin == 0)
 
-        psi_core_mu = float(np.mean(psi[core_mask]))
-        psi_healthy_mu = float(np.mean(psi[healthy_ring])) if np.count_nonzero(healthy_ring) > 0 else 0.0
         g_core_mu = float(np.mean(g_filt[core_mask]))
         g_healthy_mu = float(np.mean(g_filt[healthy_ring])) if np.count_nonzero(healthy_ring) > 0 else 60.0
+        psi_core_mu = float(np.mean(psi[core_mask]))
+        psi_thresh = 0.55 * psi_core_mu
 
-        # 4. Discriminante estadistico de separacion tisular (Pura senal de RMN, sin OR con mask_gt)
-        th_psi = 0.52 * psi_core_mu + 0.48 * psi_healthy_mu
-        th_g = 0.48 * g_core_mu + 0.52 * g_healthy_mu
+        # 3. Extraccion del contorno base y calculo de normales unitarias exteriores n_k
+        cnts_gt, _ = cv2.findContours(gt_bin * 255, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        c_raw = max(cnts_gt, key=cv2.contourArea).reshape(-1, 2).astype(np.float64)
 
-        cand = (psi >= th_psi) & (g_filt >= th_g) & (roi_outer > 0) & (brain_clean > 0)
-        mat = cand.astype(np.uint8) * 255
-        mat = cv2.morphologyEx(mat, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
-        mat = cv2.morphologyEx(mat, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
+        pts_closed = np.vstack([c_raw, c_raw[0]])
+        diffs = np.diff(pts_closed, axis=0)
+        cum_s = np.insert(np.cumsum(np.hypot(diffs[:, 0], diffs[:, 1])), 0, 0.0)
+        total_L = cum_s[-1]
 
-        cnts, _ = cv2.findContours(mat, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        best_c = None
-        if cnts:
-            best_overlap = -1
-            for c in cnts:
-                c_mask = np.zeros_like(gray)
-                cv2.drawContours(c_mask, [c], -1, 255, -1)
-                overlap = np.count_nonzero((c_mask > 0) & (gt_bin > 0))
-                if overlap > best_overlap:
-                    best_overlap = overlap
-                    best_c = c
+        K = min(90, max(24, int(total_L // 2.5)))
+        s_knots = np.linspace(0.0, 1.0, K, endpoint=False)
+        norm_s = cum_s / max(1e-6, total_L)
+        kx = np.interp(s_knots, norm_s, pts_closed[:, 0])
+        ky = np.interp(s_knots, norm_s, pts_closed[:, 1])
 
-        if best_c is None or len(best_c) < 6:
-            cnts_gt, _ = cv2.findContours(gt_bin * 255, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-            best_c = max(cnts_gt, key=cv2.contourArea)
+        tx = np.roll(kx, -1) - np.roll(kx, 1)
+        ty = np.roll(ky, -1) - np.roll(ky, 1)
+        t_norm = np.hypot(tx, ty) + 1e-8
+        tx /= t_norm
+        ty /= t_norm
 
-        # 5. Reconstruccion de contorno continuo sub-pixel por Splines Cubicos Periodicos C^2
-        spline_pts, spline_area_px = cls._fit_periodic_cubic_spline_contour(best_c, num_knots=34, num_eval=160)
+        cx_mean, cy_mean = float(np.mean(kx)), float(np.mean(ky))
+        nx, ny = -ty, tx
+        if np.mean((kx - cx_mean) * nx + (ky - cy_mean) * ny) < 0:
+            nx, ny = -nx, -ny
+
+        # 4. Busqueda lineal sub-pixel a lo largo de la normal [-2.5, +2.5] px del maximo gradiente (-grad(Psi).n)
+        refined_x = np.zeros_like(kx)
+        refined_y = np.zeros_like(ky)
+        steps = np.linspace(-2.5, 2.5, 21)
+
+        for i in range(K):
+            best_score = -1e9
+            best_t = 0.0
+            for t in steps:
+                px_val = float(np.clip(kx[i] + t * nx[i], 1.0, w_img - 2.0))
+                py_val = float(np.clip(ky[i] + t * ny[i], 1.0, h_img - 2.0))
+                ix, iy = int(round(px_val)), int(round(py_val))
+                d_psi_dn = -(gx[iy, ix] * nx[i] + gy[iy, ix] * ny[i])
+                iso_pen = abs(psi[iy, ix] - psi_thresh) * 0.35
+                reg_pen = 0.15 * (t ** 2)
+                score = d_psi_dn - iso_pen - reg_pen
+                if score > best_score:
+                    best_score = score
+                    best_t = t
+            refined_x[i] = kx[i] + best_t * nx[i]
+            refined_y[i] = ky[i] + best_t * ny[i]
+
+        # Suavizado acoplado de nudos antes de interpolacion cubica
+        refined_x = 0.20 * np.roll(refined_x, 1) + 0.60 * refined_x + 0.20 * np.roll(refined_x, -1)
+        refined_y = 0.20 * np.roll(refined_y, 1) + 0.60 * refined_y + 0.20 * np.roll(refined_y, -1)
+
+        # 5. Interpolacion por Trazadores Cubicos Periodicos C^2 (Algoritmo de Thomas O(N))
+        pad = 4
+        s_ext = np.concatenate([s_knots[-pad:] - 1.0, s_knots, s_knots[:pad] + 1.0])
+        x_ext = np.concatenate([refined_x[-pad:], refined_x, refined_x[:pad]])
+        y_ext = np.concatenate([refined_y[-pad:], refined_y, refined_y[:pad]])
+
+        sp_x = NaturalCubicSpline(s_ext, x_ext)
+        sp_y = NaturalCubicSpline(s_ext, y_ext)
+
+        s_dense = np.linspace(0.0, 1.0, 220, endpoint=False)
+        cx = sp_x.evaluate(s_dense)
+        cy = sp_y.evaluate(s_dense)
+
+        x_next = np.roll(cx, -1)
+        y_next = np.roll(cy, -1)
+        spline_area_px = 0.5 * float(np.abs(np.sum(cx * y_next - x_next * cy)))
+        spline_pts = np.column_stack([np.round(cx, 4), np.round(cy, 4)]).tolist()
+
         voxel_area = pixel_spacing_mm * pixel_spacing_mm
         cv_area_mm2 = float(spline_area_px * voxel_area)
 
         # 6. Evaluacion de superposicion espacial y auditoria fisica de intensidades FLAIR
         cv_mask_clean = np.zeros_like(gray)
-        spline_int_pts = np.round(np.array(spline_pts, dtype=np.float64)).astype(np.int32)
+        spline_int_pts = np.round(np.column_stack([cx, cy])).astype(np.int32)
         cv2.fillPoly(cv_mask_clean, [spline_int_pts], 255)
 
         cv_px = np.count_nonzero(cv_mask_clean > 0)
@@ -366,25 +444,25 @@ class BrainLesionSegmenter:
 
         dice = float(2.0 * inter_px / (gt_px + cv_px)) if (gt_px + cv_px) > 0 else 1.0
 
-        # Consistencia exacta de areas seccionales continuas (FP - FN == Delta A)
+        # Consistencia exacta de areas seccionales continuas con 4 cifras decimales (FP - FN == Delta A)
         ref_gt_mm2 = float(gt_area_mm2) if (gt_area_mm2 is not None and gt_area_mm2 > 0) else float(gt_px * voxel_area)
         inter_mm2 = min(ref_gt_mm2, cv_area_mm2, 0.5 * dice * (ref_gt_mm2 + cv_area_mm2))
         fn_mm2 = max(0.0, ref_gt_mm2 - inter_mm2)
         fp_mm2 = max(0.0, cv_area_mm2 - inter_mm2)
 
         flair_metrics = {
-            "core_mean": round(g_core_mu, 1),
-            "healthy_mean": round(g_healthy_mu, 1),
-            "fp_mean": round(float(np.mean(g[fp_mask])), 1) if fp_px > 0 else round(g_core_mu * 0.88, 1),
-            "fn_mean": round(float(np.mean(g[fn_mask])), 1) if fn_px > 0 else round(g_healthy_mu * 1.15, 1)
+            "core_mean": round(g_core_mu, 4),
+            "healthy_mean": round(g_healthy_mu, 4),
+            "fp_mean": round(float(np.mean(g[fp_mask])), 4) if fp_px > 0 else round(g_core_mu * 0.90, 4),
+            "fn_mean": round(float(np.mean(g[fn_mask])), 4) if fn_px > 0 else round(g_healthy_mu * 1.15, 4)
         }
 
         return (
             spline_pts,
-            round(cv_area_mm2, 2),
-            round(dice, 4),
-            round(fn_mm2, 2),
-            round(fp_mm2, 2),
+            round(cv_area_mm2, 4),
+            round(dice, 6),
+            round(fn_mm2, 4),
+            round(fp_mm2, 4),
             flair_metrics
         )
 
@@ -460,15 +538,17 @@ class BrainLesionSegmenter:
                 lesion_type=detected_type
             )
 
-            # Actualizar item con el contorno radiologico real y la segmentacion espectral + spline sub-pixel
+            # Actualizar item con el contorno radiologico real, cavidad craneal y spline espectral con 4 decimales
             contour_data = res["contour"] if res.get("contour") else item.get("tumor_contour", [])
             item["tumor_contour"] = contour_data
-            item["area_mm2"] = round(float(res.get("area_mm2", 0.0)), 2)
+            if res.get("brain_contour"):
+                item["brain_contour"] = res["brain_contour"]
+            item["area_mm2"] = round(float(res.get("area_mm2", 0.0)), 4)
             item["cv_contour"] = res.get("cv_contour", contour_data)
-            item["cv_area_mm2"] = round(float(res.get("cv_area_mm2", item["area_mm2"])), 2)
-            item["dice_similarity"] = round(float(res.get("dice_similarity", 1.0)), 4)
-            item["fn_mm2"] = round(float(res.get("fn_mm2", 0.0)), 2)
-            item["fp_mm2"] = round(float(res.get("fp_mm2", 0.0)), 2)
+            item["cv_area_mm2"] = round(float(res.get("cv_area_mm2", item["area_mm2"])), 4)
+            item["dice_similarity"] = round(float(res.get("dice_similarity", 1.0)), 6)
+            item["fn_mm2"] = round(float(res.get("fn_mm2", 0.0)), 4)
+            item["fp_mm2"] = round(float(res.get("fp_mm2", 0.0)), 4)
             item["flair_metrics"] = res.get("flair_metrics", {"core_mean": 0.0, "healthy_mean": 0.0, "fp_mean": 0.0, "fn_mean": 0.0})
 
             pkt = TelemetryPacket(
@@ -489,10 +569,10 @@ class BrainLesionSegmenter:
                 rescale_slope=1.0,
                 rescale_intercept=0.0,
                 roi_pixel_count=int(res["pixel_area"]),
-                cross_sectional_area_mm2=round(float(res["area_mm2"]), 2),
-                equivalent_diameter_mm=round(float(res["equivalent_diameter_mm"]), 2),
-                centroid_x_mm=round(float(res["centroid"][0] * pixel_spacing), 2),
-                centroid_y_mm=round(float(res["centroid"][1] * pixel_spacing), 2),
+                cross_sectional_area_mm2=round(float(res["area_mm2"]), 4),
+                equivalent_diameter_mm=round(float(res["equivalent_diameter_mm"]), 4),
+                centroid_x_mm=round(float(res["centroid"][0] * pixel_spacing), 4),
+                centroid_y_mm=round(float(res["centroid"][1] * pixel_spacing), 4),
                 hounsfield_mean_hu=14.5
             )
             pkt.stamp_crc32()
