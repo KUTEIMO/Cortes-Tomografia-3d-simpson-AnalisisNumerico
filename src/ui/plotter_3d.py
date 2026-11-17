@@ -9,6 +9,8 @@ Visualizaciones cientificas modulares inspiradas en Braintrust / Mobbin:
 """
 
 from typing import Optional, Dict, Any, List, Tuple
+import base64
+import cv2
 import numpy as np
 import plotly.graph_objects as go
 from src.engine.spline_interpolator import NaturalCubicSpline
@@ -370,17 +372,18 @@ def create_3d_full_brain_visualization(
             x_line = np.append(x_mm, x_mm[0])
             y_line = np.append(y_mm, y_mm[0])
             z_line = np.append(z_mm, z_mm[0])
-            c_name = f"Contorno IA Corte {single_slice_idx + 1}" if use_cv else f"Contorno Real Corte {single_slice_idx + 1}"
+            c_name = f"Spline Espectral IA Corte {single_slice_idx + 1}" if use_cv else f"Mascara Radiologo GT Corte {single_slice_idx + 1}"
             fig.add_trace(
                 go.Scatter3d(
                     x=x_line, y=y_line, z=z_line,
-                    mode="lines",
-                    line=dict(color=primary_color, width=5.0),
+                    mode="lines" if use_cv else "lines+markers",
+                    marker=dict(size=3, color="#2563EB") if not use_cv else dict(size=1),
+                    line=dict(color=primary_color, width=4.0),
                     name=c_name
                 )
             )
 
-        # En modo Auditoria Dual, anadir tambien el contorno alternativo
+        # En modo Auditoria Dual, anadir tambien el contorno de Spline Espectral IA para contraste directo
         if is_dual and "cv_contour" in cur_s and len(cur_s.get("cv_contour", [])) >= 4:
             cv_raw = np.array(cur_s["cv_contour"], dtype=float)
             cv_x = (cv_raw[:, 0] - center_px) * pixel_spacing_mm
@@ -392,8 +395,8 @@ def create_3d_full_brain_visualization(
                     y=np.append(cv_y, cv_y[0]),
                     z=np.append(cv_z, cv_z[0]),
                     mode="lines",
-                    line=dict(color="#059669", width=4.5, dash="dash"),
-                    name="Vision Artificial IA (Refinada)"
+                    line=dict(color="#10B981", width=4.8),
+                    name="Spline Espectral IA (Sub-pixel C²)"
                 )
             )
 
@@ -534,20 +537,29 @@ def create_3d_full_brain_visualization(
 
     # Camara optimizada para coincidir al 100% con la orientacion axial de la RMN 2D
     # (Anterior arriba, Posterior abajo, Izquierda derecha, Derecha izquierda)
-    cam_aligned_top = dict(eye=dict(x=0.0, y=0.001, z=2.20), up=dict(x=0.0, y=1.0, z=0.0))
+    cam_aligned_top = dict(eye=dict(x=0.0, y=0.001, z=1.95), up=dict(x=0.0, y=1.0, z=0.0))
     cam_perspective = dict(eye=dict(x=1.75, y=1.75, z=1.20), up=dict(x=0.0, y=0.0, z=1.0))
     initial_cam = cam_aligned_top if single_slice_idx is not None else cam_perspective
 
-    scene_kwargs = dict(
-        xaxis=dict(title="X Sagital (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
-        yaxis=dict(title="Y Coronal (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
-        zaxis=dict(title="Z Axial (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
-        bgcolor=THEME_BG,
-        camera=initial_cam
-    )
     if single_slice_idx is not None:
-        scene_kwargs["aspectmode"] = "manual"
-        scene_kwargs["aspectratio"] = dict(x=1.0, y=1.0, z=0.45)
+        z_ref = float(active_z) if active_z is not None else 0.0
+        scene_kwargs = dict(
+            xaxis=dict(title="X Sagital (mm)", range=[-118.0, 118.0], autorange=False, backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
+            yaxis=dict(title="Y Coronal (mm)", range=[-118.0, 118.0], autorange=False, backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
+            zaxis=dict(title="Z Axial (mm)", range=[z_ref - 35.0, z_ref + 35.0], autorange=False, backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
+            bgcolor=THEME_BG,
+            camera=initial_cam,
+            aspectmode="manual",
+            aspectratio=dict(x=1.0, y=1.0, z=0.35)
+        )
+    else:
+        scene_kwargs = dict(
+            xaxis=dict(title="X Sagital (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
+            yaxis=dict(title="Y Coronal (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
+            zaxis=dict(title="Z Axial (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
+            bgcolor=THEME_BG,
+            camera=initial_cam
+        )
 
     fig.update_layout(
         height=490,
@@ -612,11 +624,9 @@ def create_2d_slice_view(
     """
     Renderiza el visor bidimensional de resonancia magnetica con coordenadas milimetricas
     reales en los ejes X Sagital e Y Coronal, etiquetas anatomicas y overlay vectorial.
-    Mapeo espacial calibrado:
-    - Eje X: [-half_w, +half_w] mm (Derecha radiologica a la izquierda, Izquierda a la derecha).
-    - Eje Y: [-half_h, +half_h] mm (Posterior/Occipucio abajo, Anterior/Cara/Ojos arriba).
+    Utiliza layout.images anclado a coordenadas fisicas (xref='x', yref='y') para impedir
+    que Plotly.js contraiga el dominio del canvas al cambiar de zoom o interactuar.
     """
-    # Garantizar formato RGB de 3 canales
     if len(img_rgb.shape) == 2:
         img_rgb = np.stack([img_rgb] * 3, axis=-1)
     elif img_rgb.shape[2] == 1:
@@ -629,17 +639,35 @@ def create_2d_slice_view(
 
     fig = go.Figure()
 
-    # Imagen Medica con calibracion espacial milimetrica exacta en coordenadas cartesianas positivas
-    # Invertir verticalmente para que dy sea positivo (+pixel_spacing_mm), eliminando bugs de zoom en Plotly
-    img_display = np.flipud(img_rgb)
+    # Codificar imagen medica en PNG base64 para anclaje cartesiano inalterable (100% viewport)
+    img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+    _, buf = cv2.imencode(".png", img_bgr)
+    b64_img = base64.b64encode(buf).decode("ascii")
+
+    fig.add_layout_image(
+        dict(
+            source=f"data:image/png;base64,{b64_img}",
+            xref="x",
+            yref="y",
+            x=-half_w,
+            y=half_h,
+            sizex=2.0 * half_w,
+            sizey=2.0 * half_h,
+            sizing="stretch",
+            opacity=1.0,
+            layer="below"
+        )
+    )
+
+    # Traza base invisible para inicializar el plano cartesiano y ofrecer telemetria de coordenadas
     fig.add_trace(
-        go.Image(
-            z=img_display,
-            x0=-half_w,
-            dx=pixel_spacing_mm,
-            y0=-half_h,
-            dy=pixel_spacing_mm,
-            hovertemplate="X Sagital: %{x:.1f} mm<br>Y Coronal: %{y:.1f} mm<extra></extra>"
+        go.Scatter(
+            x=[-half_w, half_w],
+            y=[-half_h, half_h],
+            mode="markers",
+            marker=dict(size=1, opacity=0.0),
+            showlegend=False,
+            hoverinfo="skip"
         )
     )
 
@@ -655,10 +683,11 @@ def create_2d_slice_view(
         fig.add_trace(
             go.Scatter(
                 x=cx_mm, y=cy_mm,
-                mode="lines",
-                line=dict(color="#2563EB", width=2.8),
-                name="Mascara Radiologo (GT)",
-                hovertemplate=f"Perimetro Clinico TCGA<br>Area = {area_mm2:.1f} mm²<extra></extra>"
+                mode="lines+markers",
+                marker=dict(size=4, color="#2563EB"),
+                line=dict(color="#2563EB", width=2.4),
+                name="Mascara Radiologo (GT Manual)",
+                hovertemplate=f"Poligono Manual Radiologo (GT)<br>X = %{{x:.1f}} mm, Y = %{{y:.1f}} mm<br>Area = {area_mm2:.1f} mm²<extra></extra>"
             )
         )
         cent_x_mm = float(cx_mm[:-1].mean())
@@ -674,16 +703,16 @@ def create_2d_slice_view(
         )
         fig.add_annotation(
             x=min(cx_mm), y=max(cy_mm) + 6,
-            text=f"A = {area_mm2:.1f} mm²",
+            text=f"A(GT) = {area_mm2:.1f} mm²",
             showarrow=False,
             font=dict(size=11, color="#2563EB", family="Inter"),
-            bgcolor="rgba(255, 255, 255, 0.85)",
+            bgcolor="rgba(255, 255, 255, 0.88)",
             bordercolor="#2563EB",
             borderwidth=1,
             borderpad=3
         )
 
-    # 2. Modo Vision Artificial Refinada (Segmentacion Espectral Adaptativa en Esmeralda)
+    # 2. Modo Vision Artificial Refinada (Segmentacion Espectral + Spline Cubico Sub-pixel en Esmeralda)
     elif view_mode == "Vision Artificial Refinada (Esmeralda)":
         active_pts = cv_contour_pts if (cv_contour_pts and len(cv_contour_pts) >= 4) else contour_pts
         active_area = cv_area_mm2 if cv_area_mm2 > 0 else area_mm2
@@ -693,9 +722,9 @@ def create_2d_slice_view(
                 go.Scatter(
                     x=cx_mm, y=cy_mm,
                     mode="lines",
-                    line=dict(color="#059669", width=2.8),
-                    name="Vision Artificial (IA Refinada)",
-                    hovertemplate=f"Perimetro Refinado CAD<br>Area = {active_area:.1f} mm²<extra></extra>"
+                    line=dict(color="#10B981", width=2.8),
+                    name="Spline Espectral IA (Sub-pixel C²)",
+                    hovertemplate=f"Spline Cubico Espectral IA<br>X = %{{x:.2f}} mm, Y = %{{y:.2f}} mm<br>Area = {active_area:.1f} mm²<extra></extra>"
                 )
             )
             cent_x_mm = float(cx_mm[:-1].mean())
@@ -704,33 +733,34 @@ def create_2d_slice_view(
                 go.Scatter(
                     x=[cent_x_mm], y=[cent_y_mm],
                     mode="markers",
-                    marker=dict(color="#10B981", size=8, symbol="circle"),
+                    marker=dict(color="#059669", size=8, symbol="circle"),
                     name="Centroide IA",
                     hovertemplate=f"Centroide IA<br>X = {cent_x_mm:.1f} mm, Y = {cent_y_mm:.1f} mm<extra></extra>"
                 )
             )
             fig.add_annotation(
                 x=min(cx_mm), y=max(cy_mm) + 6,
-                text=f"A (IA) = {active_area:.1f} mm²",
+                text=f"A(Spline IA) = {active_area:.1f} mm²",
                 showarrow=False,
                 font=dict(size=11, color="#059669", family="Inter"),
-                bgcolor="rgba(255, 255, 255, 0.85)",
+                bgcolor="rgba(255, 255, 255, 0.88)",
                 bordercolor="#059669",
                 borderwidth=1,
                 borderpad=3
             )
 
-    # 3. Modo Auditoria Dual: Clinico vs IA (Ambos contornos para contrastar discrepancias)
+    # 3. Modo Auditoria Dual: Clinico vs IA (Contraste directo entre Poligono Discreto GT y Spline C² IA)
     elif view_mode == "Auditoria Dual: Clinico vs IA":
         if contour_pts and len(contour_pts) >= 4:
             gt_x, gt_y = to_mm_poly(contour_pts)
             fig.add_trace(
                 go.Scatter(
                     x=gt_x, y=gt_y,
-                    mode="lines",
-                    line=dict(color="#2563EB", width=2.4),
-                    name="Mascara Radiologo (GT)",
-                    hovertemplate=f"Mascara Radiologo (GT)<br>Area = {area_mm2:.1f} mm²<extra></extra>"
+                    mode="lines+markers",
+                    marker=dict(size=4, color="#3B82F6"),
+                    line=dict(color="#2563EB", width=2.2),
+                    name="Mascara Radiologo (GT Manual)",
+                    hovertemplate=f"Mascara Radiologo (GT Manual)<br>X = %{{x:.1f}} mm, Y = %{{y:.1f}} mm<br>Area = {area_mm2:.1f} mm²<extra></extra>"
                 )
             )
         if cv_contour_pts and len(cv_contour_pts) >= 4:
@@ -739,14 +769,14 @@ def create_2d_slice_view(
                 go.Scatter(
                     x=cv_x, y=cv_y,
                     mode="lines",
-                    line=dict(color="#059669", width=2.4, dash="dash"),
-                    name="Vision Artificial (IA)",
-                    hovertemplate=f"Vision Artificial (IA Refinada)<br>Area = {cv_area_mm2:.1f} mm²<br>DICE = {dice_score*100:.1f}%<extra></extra>"
+                    line=dict(color="#10B981", width=2.8),
+                    name="Spline Espectral IA (Sub-pixel C²)",
+                    hovertemplate=f"Spline Cubico Espectral IA<br>X = %{{x:.2f}} mm, Y = %{{y:.2f}} mm<br>Area = {cv_area_mm2:.1f} mm² (DICE {dice_score*100:.1f}%)<extra></extra>"
                 )
             )
             fig.add_annotation(
                 x=min(cv_x), y=max(cv_y) + 6,
-                text=f"GT: {area_mm2:.1f} | IA: {cv_area_mm2:.1f} mm² (DICE {dice_score*100:.1f}%)",
+                text=f"GT: {area_mm2:.1f} | Spline IA: {cv_area_mm2:.1f} mm² (DICE {dice_score*100:.1f}%)",
                 showarrow=False,
                 font=dict(size=11, color="#0F172A", family="Inter"),
                 bgcolor="rgba(255, 255, 255, 0.90)",
@@ -768,14 +798,14 @@ def create_2d_slice_view(
         cent_y = float(cy_vals.mean())
         has_centroid = True
 
-    limit_full = 125.0
+    limit_full = 122.0
 
     if "200%" in zoom_mode and has_centroid:
-        span = 65.0
+        span = 62.0
         x_range = [cent_x - span, cent_x + span]
         y_range = [cent_y - span, cent_y + span]
     elif "300%" in zoom_mode and has_centroid:
-        span = 40.0
+        span = 36.0
         x_range = [cent_x - span, cent_x + span]
         y_range = [cent_y - span, cent_y + span]
     else:
@@ -828,7 +858,7 @@ def create_2d_slice_view(
         height=490,
         dragmode="pan",
         title=dict(
-            text=f"<b>Resonancia Magnetica Axial (FLAIR)</b><br><span style='font-size:11px;color:#64748B;'>Corte {slice_idx + 1} de {total_slices} | z = {active_z:.1f} mm | Area = {area_mm2:.1f} mm2</span>",
+            text=f"<b>Resonancia Magnetica Axial (FLAIR)</b><br><span style='font-size:11px;color:#64748B;'>Corte {slice_idx + 1} de {total_slices} | z = {active_z:.1f} mm | Area GT = {area_mm2:.1f} mm² | Area IA = {cv_area_mm2:.1f} mm²</span>",
             font=dict(size=12, family="Inter", color="#0F172A"),
             x=0.03,
             y=0.97
@@ -846,16 +876,22 @@ def create_2d_slice_view(
             title="Eje Coronal Y (mm)",
             range=y_range,
             autorange=False,
-            scaleanchor="x",
-            scaleratio=1,
             gridcolor=THEME_GRID,
             zeroline=False,
             color=THEME_MUTED,
             fixedrange=False
         ),
-        margin=dict(l=35, r=20, t=50, b=35),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.18,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=10, family="Inter", color=THEME_MUTED)
+        ),
+        margin=dict(l=40, r=20, t=52, b=55),
         paper_bgcolor=THEME_BG,
-        plot_bgcolor=THEME_BG,
+        plot_bgcolor="#0B0F19",
         font=dict(family="Inter, sans-serif", color=THEME_TEXT)
     )
 
@@ -863,45 +899,70 @@ def create_2d_slice_view(
 
 
 def create_2d_area_profile(
-    z_coords: np.ndarray, areas: np.ndarray, method_name: str = "Simpson 1/3"
+    z_coords: np.ndarray,
+    areas: np.ndarray,
+    method_name: str = "Simpson 1/3",
+    cv_areas: Optional[np.ndarray] = None
 ) -> go.Figure:
     """
     Genera el perfil bidimensional de area transversal A(z) mostrando los puntos
-    de telemetria y la curva de interpolacion para cuadratura.
+    de telemetria radiologica (GT) y la curva de Vision Artificial Espectral + Splines (CAD).
     """
     fig = go.Figure()
 
-    # Curva continua generada con Splines
     if len(z_coords) >= 3:
-        spline = NaturalCubicSpline(z_coords, areas)
+        spline_gt = NaturalCubicSpline(z_coords, areas)
         z_dense = np.linspace(z_coords[0], z_coords[-1], 150)
-        a_dense = spline.evaluate(z_dense)
+        a_dense_gt = spline_gt.evaluate(z_dense)
 
-        # Relleno del area bajo la curva (Integral definida)
         fig.add_trace(
             go.Scatter(
                 x=z_dense,
-                y=a_dense,
+                y=a_dense_gt,
                 mode="lines",
-                line=dict(color=THEME_BLUE, width=2.5),
+                line=dict(color=THEME_BLUE, width=2.4),
                 fill="tozeroy",
-                fillcolor="rgba(37, 99, 235, 0.10)",
-                name="Interpolacion A(z) [Volumen = Integral]"
+                fillcolor="rgba(37, 99, 235, 0.08)",
+                name="Perfil A_GT(z) [Mascara Radiologo]"
             )
         )
 
-    # Nodos discretos de telemetria
+        if cv_areas is not None and len(cv_areas) == len(z_coords):
+            spline_cv = NaturalCubicSpline(z_coords, cv_areas)
+            a_dense_cv = spline_cv.evaluate(z_dense)
+            fig.add_trace(
+                go.Scatter(
+                    x=z_dense,
+                    y=a_dense_cv,
+                    mode="lines",
+                    line=dict(color="#10B981", width=2.6),
+                    fill="tozeroy",
+                    fillcolor="rgba(16, 185, 129, 0.10)",
+                    name="Perfil A_IA(z) [Spline Espectral C²]"
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=z_coords,
+                    y=cv_areas,
+                    mode="markers",
+                    marker=dict(color="#059669", size=7, symbol="diamond"),
+                    name="Nodos A_i (Spline Espectral IA)",
+                    hovertemplate="z = %{x:.2f} mm<br>Area IA = %{y:.2f} mm²<extra></extra>"
+                )
+            )
+
     fig.add_trace(
         go.Scatter(
             x=z_coords,
             y=areas,
             mode="markers+text",
-            marker=dict(color="#101828", size=8, line=dict(color=THEME_BLUE, width=2)),
-            name="Cortes Axiales (Telemetria)",
-            text=[f"A_{i}" for i in range(len(z_coords))],
+            marker=dict(color="#101828", size=7, line=dict(color=THEME_BLUE, width=2)),
+            name="Nodos A_i (Mascara Radiologo GT)",
+            text=[f"A_{i+1}" for i in range(len(z_coords))],
             textposition="top center",
             textfont=dict(family="JetBrains Mono", size=10, color=THEME_MUTED),
-            hovertemplate="z = %{x:.2f} mm<br>Area = %{y:.2f} mm²<extra></extra>"
+            hovertemplate="z = %{x:.2f} mm<br>Area GT = %{y:.2f} mm²<extra></extra>"
         )
     )
 
