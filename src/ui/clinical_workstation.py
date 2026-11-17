@@ -1,10 +1,9 @@
 """
-Estacion Clinica Operativa (PACS Workstation) - NEURO-CALC
-Visor biaxial 3D/2D sincronizado, consola de navegacion axial y telemetria volumetrica.
+Modulo de la Estacion Clinica PACS y Telemetria - NEURO-CALC
 """
 
-from typing import List, Dict, Any, Optional, Tuple
 import time
+from typing import Tuple, List, Dict, Any, Optional
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -77,7 +76,7 @@ def render_clinical_workstation(
     alert_accent = "#DC2626" if risk_badge == "critical" else "#D97706" if risk_badge == "warning" else "#059669"
     pill_cls = "pill-critical" if risk_badge == "critical" else "pill-warning" if risk_badge == "warning" else "pill-stable"
     st.markdown(f"""
-    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: {alert_bg}; border: 1px solid {alert_bd}; border-left: 4px solid {alert_accent}; border-radius: 8px; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: {alert_bg}; border: 1px solid {alert_bd}; border-left: 4px solid {alert_accent}; border-radius: 8px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
         <div style="font-size: 0.86rem;">
             <strong style="color: #0F172A; font-size: 0.80rem; text-transform: uppercase; letter-spacing: 0.04em;">Estado clinico:</strong>
             <span style="color: #334155; margin-left: 6px;">{risk_title} &mdash; {risk_desc}</span>
@@ -153,7 +152,7 @@ def render_clinical_workstation(
         with st.container(border=True):
             col_3d_title, col_3d_mode = st.columns([1.4, 1.6])
             with col_3d_title:
-                st.markdown("<div class='clinical-card-header' style='padding-top: 4px; margin-bottom: 0;'>Reconstruccion 3D</div>", unsafe_allow_html=True)
+                st.markdown("<div class='clinical-card-header' style='padding-top: 4px; margin-bottom: 0;'>Reconstruccion 3D de la Lesion</div>", unsafe_allow_html=True)
             with col_3d_mode:
                 mode_3d_choice = st.radio(
                     "Modo 3D",
@@ -167,9 +166,9 @@ def render_clinical_workstation(
 
     with col_right:
         with st.container(border=True):
-            col_2d_title, col_2d_mode = st.columns([1.4, 1.6])
+            col_2d_title, col_2d_mode = st.columns([1.5, 1.5])
             with col_2d_title:
-                st.markdown(f"<div class='clinical-card-header' style='padding-top: 4px; margin-bottom: 0;'>Resonancia Axial (Corte {selected_slice_1based}/{total_active_slices})</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='clinical-card-header' style='padding-top: 4px; margin-bottom: 0;'>Resonancia Axial FLAIR (Corte {selected_slice_1based}/{total_active_slices})</div>", unsafe_allow_html=True)
             with col_2d_mode:
                 view_mode = st.selectbox(
                     "Capa 2D",
@@ -212,7 +211,12 @@ def render_clinical_workstation(
             lesion_color="#2563EB",
             view_mode=view_mode
         )
-        placeholder_3d.plotly_chart(fig_3d, width="stretch", key=f"p3d_{idx}_{time.time_ns()}")
+        placeholder_3d.plotly_chart(
+            fig_3d,
+            width="stretch",
+            config={"displayModeBar": True, "displaylogo": False},
+            key=f"p3d_{idx}"
+        )
 
         if annotated_slices:
             if view_mode == "Resonancia Pura (FLAIR)" and raw_slices:
@@ -255,26 +259,131 @@ def render_clinical_workstation(
                 fp_mm2=fp_val,
                 view_mode=view_mode
             )
-            placeholder_2d.plotly_chart(fig_2d, width="stretch", key=f"p2d_{idx}_{time.time_ns()}")
 
-            if view_mode in ["Auditoria Dual: Clinico vs IA", "Vision Artificial Refinada (Esmeralda)"] and cur_area > 0:
-                diff_mm2 = cv_area - cur_area
-                diff_pct = (diff_mm2 / cur_area * 100.0) if cur_area > 0 else 0.0
+            # Configuracion optimizada para control de zoom fluido y paneo sin saltos
+            config_2d = {
+                "scrollZoom": True,
+                "displayModeBar": True,
+                "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+                "displaylogo": False,
+                "doubleClick": "reset"
+            }
+            placeholder_2d.plotly_chart(
+                fig_2d,
+                width="stretch",
+                config=config_2d,
+                key=f"p2d_view_{idx}"
+            )
+
+            # =================================================================
+            # TELEMETRIA DE REBANADA Y AUDITORIA DE ERROR DE MASCARA PERMANENTE
+            # =================================================================
+            h_mm = float(res_simpson.slice_thickness_h)
+            local_vol_cm3 = (cur_area * h_mm) / 1000.0
+            total_vol_cm3 = float(res_simpson.volume_cm3)
+            pct_of_total = (local_vol_cm3 / total_vol_cm3 * 100.0) if total_vol_cm3 > 0 else 0.0
+
+            # Transicion con capas adyacentes
+            prev_area = packets[idx - 1].cross_sectional_area_mm2 if idx > 0 else None
+            next_area = packets[idx + 1].cross_sectional_area_mm2 if idx < (total_active_slices - 1) else None
+
+            if prev_area is not None and next_area is not None:
+                d_prev = cur_area - prev_area
+                d_next = next_area - cur_area
+                trans_html = f"Ant: {prev_area:.0f} ({d_prev:+.0f}) &rarr; Post: {next_area:.0f} ({d_next:+.0f})"
+            elif prev_area is not None:
+                d_prev = cur_area - prev_area
+                d_next = 0.0
+                trans_html = f"Ant: {prev_area:.0f} ({d_prev:+.0f}) &rarr; Apice Superior"
+            elif next_area is not None:
+                d_prev = 0.0
+                d_next = next_area - cur_area
+                trans_html = f"Base Inferior &rarr; Post: {next_area:.0f} ({d_next:+.0f})"
+            else:
+                d_prev = 0.0
+                d_next = 0.0
+                trans_html = "Corte unico"
+
+            # Metricas de discrepancia de mascara
+            diff_mm2 = cv_area - cur_area
+            diff_pct = (diff_mm2 / cur_area * 100.0) if cur_area > 0 else 0.0
+            iou_val = (dice_val / (2.0 - dice_val)) if (2.0 - dice_val) > 0 else 0.0
+            dice_pct = dice_val * 100.0
+            iou_pct = iou_val * 100.0
+            err_badge_color = "#047857" if dice_pct >= 90.0 else "#B45309" if dice_pct >= 75.0 else "#B91C1C"
+
+            if cur_area > 0:
                 placeholder_audit.markdown(f"""
-                <div style='display: flex; gap: 8px; margin-top: 6px; font-size: 11px;'>
-                    <div style='flex: 1; padding: 5px 8px; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 4px; color: #1E40AF;'>
-                        <b>Mascara Radiologo (GT):</b> {cur_area:.1f} mm²
+                <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 14px; margin-top: 8px;">
+                    <!-- Nivel 1: Desglose de capa activa y aporte volumetrico -->
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #F1F5F9; padding-bottom: 6px; margin-bottom: 8px; flex-wrap: wrap; gap: 4px;">
+                        <span style="font-size: 0.74rem; font-weight: 700; color: #0F172A; text-transform: uppercase; letter-spacing: 0.04em;">
+                            Rebanada Activa {idx + 1} de {total_active_slices} &middot; RM FLAIR
+                        </span>
+                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.76rem; font-weight: 700; color: #2563EB;">
+                            V_rebanada = {local_vol_cm3:.3f} cm³ ({pct_of_total:.1f}% del total {total_vol_cm3:.1f} cm³)
+                        </span>
                     </div>
-                    <div style='flex: 1; padding: 5px 8px; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 4px; color: #065F46;'>
-                        <b>Segmentacion CAD:</b> {cv_area:.1f} mm² ({diff_mm2:+.1f} mm² / {diff_pct:+.1f}%)
+
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; font-size: 0.76rem;">
+                        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 6px 8px;">
+                            <div style="color: #64748B; font-size: 0.68rem;">Area de corte (A_{idx + 1})</div>
+                            <div style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A; font-size: 0.88rem;">
+                                {cur_area:.1f} mm² <span style="font-size: 0.70rem; color: #64748B; font-weight: 400;">({cur_area / 100.0:.2f} cm²)</span>
+                            </div>
+                        </div>
+                        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 6px 8px;">
+                            <div style="color: #64748B; font-size: 0.68rem;">Espesor y cota</div>
+                            <div style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A; font-size: 0.88rem;">
+                                h = {h_mm:.1f} mm &middot; z = {cur_z:.1f}
+                            </div>
+                        </div>
+                        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 6px 8px;">
+                            <div style="color: #64748B; font-size: 0.68rem;">Transicion contigua</div>
+                            <div style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #334155; font-size: 0.74rem;">
+                                {trans_html}
+                            </div>
+                        </div>
                     </div>
-                    <div style='flex: 1.2; padding: 5px 8px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 4px; color: #334155;'>
-                        <b>DICE:</b> {dice_val*100:.1f}% | <b>FN:</b> {fn_val:.1f} mm² | <b>FP:</b> {fp_val:.1f} mm²
+
+                    <!-- Nivel 2: Auditoria de error frente a mascara original -->
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #F1F5F9; padding-bottom: 4px; margin-bottom: 8px; flex-wrap: wrap; gap: 4px;">
+                        <span style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em;">
+                            Auditoria frente a Mascara Original (Radiologo vs Algoritmo)
+                        </span>
+                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; font-weight: 700; color: {err_badge_color};">
+                            DICE: {dice_pct:.1f}% &middot; IoU: {iou_pct:.1f}%
+                        </span>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1.15fr 1.15fr; gap: 6px; font-size: 0.76rem;">
+                        <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 6px; padding: 6px 8px; color: #1E40AF;">
+                            <div style="font-size: 0.68rem; font-weight: 600;">Mascara Radiologo (GT)</div>
+                            <div style="font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.88rem;">
+                                {cur_area:.1f} mm²
+                            </div>
+                        </div>
+                        <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 6px; padding: 6px 8px; color: #065F46;">
+                            <div style="font-size: 0.68rem; font-weight: 600;">Segmentacion Algoritmo</div>
+                            <div style="font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.88rem;">
+                                {cv_area:.1f} mm² <span style="font-size: 0.70rem;">({diff_mm2:+.1f} mm² / {diff_pct:+.1f}%)</span>
+                            </div>
+                        </div>
+                        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 6px 8px; color: #334155;">
+                            <div style="font-size: 0.68rem; font-weight: 600;">Error Espacial (FN / FP)</div>
+                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; font-weight: 600;">
+                                Omitido (FN): {fn_val:.1f} mm²<br>Extra (FP): {fp_val:.1f} mm²
+                            </div>
+                        </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                placeholder_audit.empty()
+                placeholder_audit.markdown(f"""
+                <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px 14px; margin-top: 8px; font-size: 0.80rem; color: #64748B; text-align: center;">
+                    <strong>Corte {idx + 1} de {total_active_slices} (z = {cur_z:.1f} mm):</strong> Seccion de parenquima encefalico libre de hiperintensidad lesional (Area: 0.0 mm² &middot; V_rebanada = 0.0 cm³).
+                </div>
+                """, unsafe_allow_html=True)
         else:
             placeholder_2d.markdown("<div style='padding: 20px 0; color: #475467;'>No hay cortes disponibles para este estudio.</div>", unsafe_allow_html=True)
             placeholder_audit.empty()
@@ -320,7 +429,7 @@ def render_clinical_workstation(
     with tab_profile:
         with st.container(border=True):
             fig_2d = create_2d_area_profile(z_coords, areas, res_simpson.method_used)
-            st.plotly_chart(fig_2d, width="stretch")
+            st.plotly_chart(fig_2d, width="stretch", config={"displayModeBar": True, "displaylogo": False})
 
     with tab_telemetry:
         with st.container(border=True):
@@ -360,14 +469,15 @@ Rango Axial: [{z_coords[0]:.2f} mm a {z_coords[-1]:.2f} mm]
 RESULTADOS DE INTEGRACION NUMERICA:
 Metodo Aplicado: {res_simpson.method_used}
 Orden de Error de Truncamiento: {res_simpson.error_order}
-Volumen Simpson: {res_simpson.volume_cm3:.4f} cm3 ({res_simpson.volume_mm3:.2f} mm3)
-Volumen Trapecio: {res_trapezoid.volume_cm3:.4f} cm3
+Volumen Simpson 1/3 (Total FLAIR): {res_simpson.volume_cm3:.4f} cm3 ({res_simpson.volume_mm3:.2f} mm3)
+Volumen Trapecio Compuesto: {res_trapezoid.volume_cm3:.4f} cm3
 Volumen Conteo de Voxeles (Riemann): {res_riemann.volume_cm3:.4f} cm3
 Area Seccional Maxima: {np.max(areas):.2f} mm2 (en z = {z_coords[np.argmax(areas)]:.2f} mm)
 
 ESTADIFICACION VOLUMETRICA:
 Categoria: {risk_title}
 Criterio Clinico: {risk_desc}
+Interpretacion FLAIR: Compromiso parenquimatoso combinado (Masa tumoral + Edema vasogenico infiltrante).
 Verificacion CRC32: 100% integro
 ================================================================================
 """

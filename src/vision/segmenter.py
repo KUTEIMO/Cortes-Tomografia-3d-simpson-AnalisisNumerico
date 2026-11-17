@@ -264,8 +264,11 @@ class BrainLesionSegmenter:
 
         cv_px = np.count_nonzero(cv_mask_clean > 0)
         inter = np.count_nonzero((mask_gt > 128) & (cv_mask_clean > 0))
-        fn_px = np.count_nonzero((mask_gt == 0) & (cv_mask_clean > 0))
-        fp_px = np.count_nonzero((mask_gt > 128) & (cv_mask_clean == 0))
+        # Definicion clinica estandar:
+        # Falso positivo: el algoritmo predijo lesion (cv>0) donde el radiologo no delimito (gt==0)
+        fp_px = np.count_nonzero((mask_gt == 0) & (cv_mask_clean > 0))
+        # Falso negativo: el radiologo delimito lesion (gt>128) pero el algoritmo lo omitio (cv==0)
+        fn_px = np.count_nonzero((mask_gt > 128) & (cv_mask_clean == 0))
 
         dice = 2.0 * inter / (gt_px + cv_px) if (gt_px + cv_px) > 0 else 0.0
 

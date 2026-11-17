@@ -745,9 +745,12 @@ def create_2d_slice_view(
     fig.add_annotation(x=half_w - 12, y=0, text="IZQUIERDA (L)", showarrow=False, font=dict(color="#2563EB", size=10, family="Inter", weight="bold"))
 
     fig.update_layout(
+        dragmode="pan",
         title=dict(
-            text=f"Corte {slice_idx + 1} de {total_slices} | z = {active_z:.1f} mm | Area: {area_mm2:.1f} mm²",
-            font=dict(size=12, family="Inter", color=THEME_MUTED)
+            text=f"<b>Resonancia Magnetica Axial (FLAIR)</b><br><span style='font-size:11px;color:#64748B;'>Corte {slice_idx + 1} de {total_slices} &middot; z = {active_z:.1f} mm &middot; Area = {area_mm2:.1f} mm²</span>",
+            font=dict(size=12, family="Inter", color="#0F172A"),
+            x=0.03,
+            y=0.97
         ),
         xaxis=dict(
             title="Eje Sagital X (mm)",
@@ -755,7 +758,8 @@ def create_2d_slice_view(
             autorange=False,
             gridcolor=THEME_GRID,
             zeroline=False,
-            color=THEME_MUTED
+            color=THEME_MUTED,
+            constrain="domain"
         ),
         yaxis=dict(
             title="Eje Coronal Y (mm)",
@@ -765,9 +769,10 @@ def create_2d_slice_view(
             scaleratio=1,
             gridcolor=THEME_GRID,
             zeroline=False,
-            color=THEME_MUTED
+            color=THEME_MUTED,
+            constrain="domain"
         ),
-        margin=dict(l=40, r=20, t=40, b=40),
+        margin=dict(l=40, r=20, t=55, b=40),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
         font=dict(family="Inter, sans-serif", color=THEME_TEXT)
