@@ -533,8 +533,9 @@ def create_3d_full_brain_visualization(
 
     # Camara optimizada para coincidir al 100% con la orientacion axial de la RMN 2D
     # (Anterior arriba, Posterior abajo, Izquierda derecha, Derecha izquierda)
-    cam_aligned_top = dict(eye=dict(x=0.0, y=0.25, z=2.40), up=dict(x=0.0, y=1.0, z=0.0))
+    cam_aligned_top = dict(eye=dict(x=0.0, y=0.001, z=2.40), up=dict(x=0.0, y=1.0, z=0.0))
     cam_perspective = dict(eye=dict(x=1.75, y=1.75, z=1.20), up=dict(x=0.0, y=0.0, z=1.0))
+    initial_cam = cam_aligned_top if single_slice_idx is not None else cam_perspective
 
     fig.update_layout(
         scene=dict(
@@ -542,7 +543,7 @@ def create_3d_full_brain_visualization(
             yaxis=dict(title="Y Coronal (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
             zaxis=dict(title="Z Axial (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
             bgcolor=THEME_BG,
-            camera=cam_aligned_top
+            camera=initial_cam
         ),
         updatemenus=[
             dict(
@@ -614,14 +615,16 @@ def create_2d_slice_view(
 
     fig = go.Figure()
 
-    # Imagen Medica con calibracion espacial milimetrica exacta
+    # Imagen Medica con calibracion espacial milimetrica exacta en coordenadas cartesianas positivas
+    # Invertir verticalmente para que dy sea positivo (+pixel_spacing_mm), eliminando bugs de zoom en Plotly
+    img_display = np.flipud(img_rgb)
     fig.add_trace(
         go.Image(
-            z=img_rgb,
+            z=img_display,
             x0=-half_w,
             dx=pixel_spacing_mm,
-            y0=half_h,
-            dy=-pixel_spacing_mm,
+            y0=-half_h,
+            dy=pixel_spacing_mm,
             hovertemplate="X Sagital: %{x:.1f} mm<br>Y Coronal: %{y:.1f} mm<extra></extra>"
         )
     )
@@ -747,7 +750,7 @@ def create_2d_slice_view(
     fig.update_layout(
         dragmode="pan",
         title=dict(
-            text=f"<b>Resonancia Magnetica Axial (FLAIR)</b><br><span style='font-size:11px;color:#64748B;'>Corte {slice_idx + 1} de {total_slices} &middot; z = {active_z:.1f} mm &middot; Area = {area_mm2:.1f} mm²</span>",
+            text=f"<b>Resonancia Magnetica Axial (FLAIR)</b><br><span style='font-size:11px;color:#64748B;'>Corte {slice_idx + 1} de {total_slices} | z = {active_z:.1f} mm | Area = {area_mm2:.1f} mm2</span>",
             font=dict(size=12, family="Inter", color="#0F172A"),
             x=0.03,
             y=0.97
@@ -759,7 +762,7 @@ def create_2d_slice_view(
             gridcolor=THEME_GRID,
             zeroline=False,
             color=THEME_MUTED,
-            constrain="domain"
+            fixedrange=False
         ),
         yaxis=dict(
             title="Eje Coronal Y (mm)",
@@ -770,7 +773,7 @@ def create_2d_slice_view(
             gridcolor=THEME_GRID,
             zeroline=False,
             color=THEME_MUTED,
-            constrain="domain"
+            fixedrange=False
         ),
         margin=dict(l=40, r=20, t=55, b=40),
         paper_bgcolor=THEME_BG,

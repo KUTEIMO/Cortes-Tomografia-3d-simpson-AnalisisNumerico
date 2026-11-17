@@ -508,7 +508,7 @@ elif current_route == "Estacion PACS & Resultados":
             st.markdown(f"""
             <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; font-size: 0.83rem; color: #334155; line-height: 1.55;">
                 <div style="font-weight: 700; color: #0F172A; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                    <span style="color: #2563EB;">ℹ️</span> <strong>Interpretacion Clinica del Volumen FLAIR ({res_simpson.volume_cm3:.3f} cm³):</strong>
+                    <strong>Interpretacion Clinica del Volumen FLAIR ({res_simpson.volume_cm3:.3f} cm3):</strong>
                 </div>
                 En resonancia magnetica axial <strong>FLAIR</strong>, la hiperintensidad parenquimatosa abarca el <strong>volumen de compromiso total</strong>: masa tumoral solida <em>mas el edema vasogenico perilesional expansivo</em>. Un volumen combinado de ~{res_simpson.volume_cm3:.1f} cm³ en un encefalo adulto (~1400 cm³) representa cerca del 9% del volumen intracraneal, explicando el <strong>efecto de masa severo, desplazamiento de la linea media y colapso de ventriculos laterales</strong> (Grado III Quirurgico Urgente).
             </div>
