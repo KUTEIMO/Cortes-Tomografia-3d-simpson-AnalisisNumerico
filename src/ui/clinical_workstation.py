@@ -294,12 +294,12 @@ def render_clinical_workstation(
                 zoom_mode=zoom_mode
             )
 
-            # Configuracion optimizada para control de zoom 1:1 proporcional y paneo sin deformar aspecto
+            # Configuracion optimizada para control de zoom fluido y paneo sin saltos
             config_2d = {
                 "scrollZoom": True,
                 "displayModeBar": True,
-                "modeBarButtonsToAdd": ["pan2d", "zoomIn2d", "zoomOut2d", "resetScale2d"],
-                "modeBarButtonsToRemove": ["zoom2d", "lasso2d", "select2d", "autoScale2d"],
+                "modeBarButtonsToAdd": ["zoom2d", "pan2d", "zoomIn2d", "zoomOut2d", "autoScale2d", "resetScale2d"],
+                "modeBarButtonsToRemove": ["lasso2d", "select2d"],
                 "displaylogo": False,
                 "doubleClick": "reset"
             }

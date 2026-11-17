@@ -417,5 +417,16 @@ div[data-testid="column"] {
     padding-top: 0px !important;
     padding-bottom: 0px !important;
 }
+
+/* Ocultar aviso intrusivo 'Press Enter to submit form / apply' en inputs de Streamlit */
+div[data-testid="InputInstructions"],
+[data-testid="InputInstructions"],
+.stTextInput div[data-testid="InputInstructions"] {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+}
 </style>
 """

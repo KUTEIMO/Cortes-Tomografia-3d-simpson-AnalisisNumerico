@@ -83,11 +83,13 @@ if "auth_lockout_until" not in st.session_state:
     st.session_state.auth_lockout_until = 0.0
 
 if not st.session_state.is_presentation_authenticated:
-    # Ocultar barra lateral por completo en la vista de inicio de sesion
+    # Ocultar barra lateral y avisos 'Press Enter to submit form' en la vista de inicio de sesion
     st.markdown("""
     <style>
         section[data-testid="stSidebar"] { display: none !important; }
         [data-testid="stExpandSidebarButton"], [data-testid="stSidebarCollapsedControl"] { display: none !important; }
+        div[data-testid="InputInstructions"], [data-testid="InputInstructions"] { display: none !important; visibility: hidden !important; }
+        div[data-testid="stForm"] { background: #FFFFFF !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; padding: 20px 24px !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -97,16 +99,16 @@ if not st.session_state.is_presentation_authenticated:
         st.error(f"Acceso bloqueado temporalmente. Reintente en {remaining_lock} segundos.")
         st.stop()
 
-    col_auth_center = st.columns([1.2, 1.0, 1.2])[1]
+    col_auth_center = st.columns([1.0, 1.3, 1.0])[1]
     with col_auth_center:
         st.markdown("""
-        <div style="margin-top: 64px; background: #FFFFFF; border: 1px solid #EAECF0; border-radius: 10px; padding: 28px 24px 20px 24px; text-align: center;">
-            <div style="font-size: 0.68rem; font-weight: 700; color: #2563EB; letter-spacing: 0.08em; text-transform: uppercase;">
+        <div style="margin-top: 48px; margin-bottom: 12px; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 24px 24px 18px 24px; text-align: center;">
+            <div style="font-size: 0.70rem; font-weight: 700; color: #2563EB; letter-spacing: 0.08em; text-transform: uppercase;">
                 ACCESO RESTRINGIDO
             </div>
-            <h2 style="margin: 6px 0 4px 0; font-size: 1.35rem; color: #101828;">NEURO-CALC</h2>
-            <div style="font-size: 0.80rem; color: #667085;">
-                Estacion de Telemetria Tomografica
+            <h2 style="margin: 6px 0 4px 0; font-size: 1.40rem; color: #101828;">NEURO-CALC</h2>
+            <div style="font-size: 0.84rem; color: #667085;">
+                Estacion de Telemetria Tomografica y Volumetria 3D
             </div>
         </div>
         """, unsafe_allow_html=True)
