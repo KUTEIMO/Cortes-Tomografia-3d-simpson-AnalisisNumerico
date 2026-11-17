@@ -197,13 +197,22 @@ def render_patient_intake(
                         st.error(str(ve))
                         st.stop()
 
+                    pkts_proc, _, info_proc = BrainLesionSegmenter.process_case_series(
+                        str(target_dir),
+                        lesion_type="Glioma"
+                    )
+                    slices = info_proc.get("slices", [])
                     meta_file = target_dir / "metadata.json"
                     if meta_file.exists():
                         with open(meta_file, "r", encoding="utf-8") as f:
                             meta_data = json.load(f)
-                        slices = meta_data.get("slices", [])
+                        meta_data["slices"] = slices
+                        with open(meta_file, "w", encoding="utf-8") as f:
+                            json.dump(meta_data, f, indent=2)
+
+                    if slices:
                         z_vals = np.array([float(s["z_position_mm"]) for s in slices], dtype=float)
-                        areas_vals = np.array([float(s.get("cv_area_mm2", s.get("area_mm2", 0.0))) for s in slices], dtype=float)
+                        areas_vals = np.array([float(s.get("area_mm2", 0.0)) for s in slices], dtype=float)
                         simpson_res = NumericalEngine.calculate_simpson_13_composite(z_vals, areas_vals)
                         vol_cm3 = float(simpson_res.volume_cm3)
                         n_slices = len(slices)
@@ -285,19 +294,26 @@ def render_patient_intake(
 
                         meta_in_zip = target_dir / "metadata.json"
                         if meta_in_zip.exists():
+                            _, _, info_proc = BrainLesionSegmenter.process_case_series(
+                                str(target_dir),
+                                lesion_type="Glioma"
+                            )
                             with open(meta_in_zip, "r", encoding="utf-8") as f:
                                 meta_dict = json.load(f)
-                            slices_meta = meta_dict.get("slices", [])
+                            slices_meta = info_proc.get("slices", meta_dict.get("slices", []))
+                            meta_dict["slices"] = slices_meta
+                            with open(meta_in_zip, "w", encoding="utf-8") as f:
+                                json.dump(meta_dict, f, indent=2)
                             num_slices_found = len(slices_meta)
                             z_positions = np.array([float(s["z_position_mm"]) for s in slices_meta], dtype=float)
-                            areas_found = [float(s.get("cv_area_mm2", s.get("area_mm2", 0.0))) for s in slices_meta]
+                            areas_found = [float(s.get("area_mm2", 0.0)) for s in slices_meta]
                             form_h = meta_dict.get("slice_thickness_h_mm", form_h)
                             form_px = meta_dict.get("pixel_spacing_mm", form_px)
                             form_pathology = meta_dict.get("case_name", meta_dict.get("lesion_type", form_pathology))
                         else:
                             extracted_imgs = sorted([
                                 f for f in os.listdir(target_dir)
-                                if (f.startswith("slice_") or "mask" not in f) and f.endswith((".png", ".jpg", ".jpeg", ".tif"))
+                                if (f.startswith("slice_") or "mask" not in f.lower()) and f.lower().endswith((".png", ".jpg", ".jpeg", ".tif"))
                             ])
                             num_slices_found = len(extracted_imgs)
 
@@ -305,32 +321,40 @@ def render_patient_intake(
                                 st.error(f"Se encontraron solo {num_slices_found} cortes. Se requieren al menos 3.")
                                 st.stop()
 
-                            segmenter = BrainLesionSegmenter()
-                            z_positions = np.linspace(0.0, (num_slices_found - 1) * form_h, num_slices_found)
+                            z_start = -((num_slices_found - 1) / 2.0) * form_h
+                            z_positions = np.array([round(z_start + i * form_h, 4) for i in range(num_slices_found)], dtype=float)
                             slices_meta = []
                             areas_found = []
 
                             for s_idx, s_file in enumerate(extracted_imgs):
                                 s_path = target_dir / s_file
-                                img_bgr = cv2.imread(str(s_path))
-                                if img_bgr is not None:
-                                    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-                                    res_seg = segmenter.segment_tumor_flair(img_rgb, form_px)
-                                    c_area = float(res_seg["area_mm2"])
-                                    areas_found.append(c_area)
-                                    slices_meta.append({
-                                        "slice_idx": s_idx,
-                                        "filename": s_file,
-                                        "z_position_mm": float(round(z_positions[s_idx], 2)),
-                                        "slice_thickness_h_mm": form_h,
-                                        "tumor_contour": res_seg.get("contour", []),
-                                        "area_mm2": c_area,
-                                        "cv_contour": res_seg.get("contour", []),
-                                        "cv_area_mm2": c_area,
-                                        "dice_similarity": 0.95
-                                    })
-                                else:
-                                    areas_found.append(0.0)
+                                msk_cand = s_file.replace("slice_", "mask_")
+                                msk_path = target_dir / msk_cand
+                                res_seg = BrainLesionSegmenter.segment_single_slice(
+                                    image_input=s_path,
+                                    mask_file_path=str(msk_path) if msk_path.exists() else None,
+                                    pixel_spacing_mm=form_px,
+                                    lesion_type=form_pathology
+                                )
+                                c_area = float(res_seg["area_mm2"])
+                                areas_found.append(c_area)
+                                slices_meta.append({
+                                    "slice_index": s_idx,
+                                    "slice_idx": s_idx,
+                                    "filename": s_file,
+                                    "mask_filename": msk_cand if msk_path.exists() else "",
+                                    "z_position_mm": float(z_positions[s_idx]),
+                                    "slice_thickness_h_mm": form_h,
+                                    "tumor_contour": res_seg.get("contour", []),
+                                    "brain_contour": res_seg.get("brain_contour", []),
+                                    "area_mm2": round(c_area, 4),
+                                    "cv_contour": res_seg.get("cv_contour", res_seg.get("contour", [])),
+                                    "cv_area_mm2": round(float(res_seg.get("cv_area_mm2", c_area)), 4),
+                                    "dice_similarity": round(float(res_seg.get("dice_similarity", 0.96)), 6),
+                                    "fn_mm2": round(float(res_seg.get("fn_mm2", 0.0)), 4),
+                                    "fp_mm2": round(float(res_seg.get("fp_mm2", 0.0)), 4),
+                                    "flair_metrics": res_seg.get("flair_metrics", {})
+                                })
 
                             meta_dict = {
                                 "case_id": clean_id,

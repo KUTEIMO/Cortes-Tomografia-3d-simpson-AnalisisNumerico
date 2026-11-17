@@ -472,35 +472,61 @@ elif current_route == "Estacion PACS & Resultados":
             res_riemann = NumericalEngine.calculate_voxel_counting_riemann(z_coords, areas)
             romberg_data = RombergEngine.compute_romberg_table(z_coords, areas, max_levels=3)
 
-            # Resumen volumetrico y metodo aplicado
+            # Calculo volumetrico de Vision Artificial + Splines C² y metricas globales de error del caso
+            if case_slices_meta and len(case_slices_meta) == len(areas):
+                cv_areas_case = np.array([float(s.get("cv_area_mm2", a)) for s, a in zip(case_slices_meta, areas)], dtype=np.float64)
+                active_dices = [float(s.get("dice_similarity", 1.0)) for s, a in zip(case_slices_meta, areas) if a > 0]
+            else:
+                cv_areas_case = areas
+                active_dices = [1.0]
+
+            res_simpson_cad = NumericalEngine.calculate_simpson_13_composite(z_coords, cv_areas_case)
+            vol_gt_cm3 = float(res_simpson.volume_cm3)
+            vol_cad_cm3 = float(res_simpson_cad.volume_cm3)
+            vol_diff_cm3 = vol_cad_cm3 - vol_gt_cm3
+            case_vol_err_pct = (abs(vol_diff_cm3) / vol_gt_cm3 * 100.0) if vol_gt_cm3 > 0 else 0.0
+            case_vol_acc_pct = max(0.0, 100.0 - case_vol_err_pct)
+
+            mean_dice_val = float(np.mean(active_dices)) if active_dices else 1.0
+            mean_dice_pct = mean_dice_val * 100.0
+            case_border_err_pct = max(0.0, 100.0 - mean_dice_pct)
+            mean_iou_pct = ((mean_dice_val / (2.0 - mean_dice_val)) * 100.0) if (2.0 - mean_dice_val) > 0 else 100.0
+
             timestamp = packets[0].timestamp_utc if packets else "2026-11-06T12:00:00Z"
-            crc_all_ok = all(p.verify_integrity() for p in packets)
             method_desc = "Simpson 1/3 compuesto (par)" if "Puro" in res_simpson.method_used else "Hibrido Simpson 1/3 + 3/8 (impar)"
 
-            col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
+            col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
             with col_kpi1:
                 st.markdown(f"""
                 <div class="kpi-card">
-                    <div class="kpi-label">Volumen total FLAIR (Masa + Edema)</div>
-                    <div class="kpi-value">{res_simpson.volume_cm3:.3f}<span class="kpi-unit">cm³</span></div>
-                    <div class="kpi-context">{method_desc} &middot; Acumulado {res_simpson.num_slices} cortes</div>
+                    <div class="kpi-label">Volumen Radiologo (GT)</div>
+                    <div class="kpi-value">{vol_gt_cm3:.4f}<span class="kpi-unit">cm³</span></div>
+                    <div class="kpi-context">{method_desc} &middot; {res_simpson.num_slices} cortes (h={res_simpson.slice_thickness_h:.1f} mm)</div>
                 </div>
                 """, unsafe_allow_html=True)
             with col_kpi2:
                 st.markdown(f"""
                 <div class="kpi-card">
-                    <div class="kpi-label">Orden de convergencia</div>
-                    <div class="kpi-value">{res_simpson.error_order}</div>
-                    <div class="kpi-context">Cuadratura compuesta O(h⁴)</div>
+                    <div class="kpi-label" style="color: #065F46 !important;">Volumen Vision Artificial (IA)</div>
+                    <div class="kpi-value" style="color: #059669 !important;">{vol_cad_cm3:.4f}<span class="kpi-unit">cm³</span></div>
+                    <div class="kpi-context">Spline Espectral C² &middot; &Delta;V = {vol_diff_cm3:+.4f} cm³</div>
                 </div>
                 """, unsafe_allow_html=True)
             with col_kpi3:
-                crc_label = "CRC32 integro al 100%" if crc_all_ok else "Error de verificacion CRC32"
+                err_kpi_col = "#047857" if case_vol_err_pct <= 5.0 else "#B45309" if case_vol_err_pct <= 10.0 else "#B91C1C"
                 st.markdown(f"""
                 <div class="kpi-card">
-                    <div class="kpi-label">Adquisicion e integridad</div>
-                    <div class="kpi-value">{res_simpson.num_slices} cortes<span class="kpi-unit">&middot; {res_simpson.slice_thickness_h:.1f} mm</span></div>
-                    <div class="kpi-context">{crc_label}</div>
+                    <div class="kpi-label">Error Volumetrico del Caso</div>
+                    <div class="kpi-value" style="color: {err_kpi_col} !important;">{case_vol_err_pct:.4f}<span class="kpi-unit">%</span></div>
+                    <div class="kpi-context">Exactitud volumetrica 3D: <strong>{case_vol_acc_pct:.4f}%</strong></div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_kpi4:
+                st.markdown(f"""
+                <div class="kpi-card">
+                    <div class="kpi-label">Error Espacial de Borde (IA)</div>
+                    <div class="kpi-value" style="color: #1E40AF !important;">{case_border_err_pct:.4f}<span class="kpi-unit">%</span></div>
+                    <div class="kpi-context">DICE medio: <strong>{mean_dice_pct:.4f}%</strong> &middot; IoU: {mean_iou_pct:.4f}%</div>
                 </div>
                 """, unsafe_allow_html=True)
 

@@ -95,32 +95,60 @@ class BrainLesionSegmenter:
             except Exception:
                 pts = None
 
-        # Opcion C: Segmentacion adaptativa por vision artificial (SOLO para uploads del usuario sin anotaciones previas)
+        # Opcion C: Deteccion Espectral Autonoma por Referencia de Hemisferio Contralateral (para estudios sin mascara previa)
         if not has_ground_truth:
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-            
-            # Mascara de cerebro
-            _, brain_mask = cv2.threshold(blurred, 25, 255, cv2.THRESH_BINARY)
-            
-            # Deteccion de regiones de alta o baja intensidad (quistes / tumores con realce)
-            thresh = cv2.adaptiveThreshold(
-                blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 21, 2
-            )
-            lesion_cand = cv2.bitwise_and(thresh, brain_mask)
-            
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-            lesion_cand = cv2.morphologyEx(lesion_cand, cv2.MORPH_OPEN, kernel)
-            
-            contours, _ = cv2.findContours(lesion_cand, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            valid_c = [c for c in contours if 50 < cv2.contourArea(c) < (w_img * h_img * 0.35)]
-            
-            if valid_c:
-                pts = max(valid_c, key=cv2.contourArea)
-                pixel_area = float(cv2.contourArea(pts))
-                M = cv2.moments(pts)
-                if M["m00"] > 0:
-                    centroid = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+            b_ch, g_ch, r_ch = cv2.split(img)
+            _, b_raw = cv2.threshold(gray, 18, 255, cv2.THRESH_BINARY)
+            cnts_b, _ = cv2.findContours(b_raw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            brain_mask = np.zeros_like(gray)
+            if cnts_b:
+                hull_b = cv2.convexHull(max(cnts_b, key=cv2.contourArea))
+                cv2.drawContours(brain_mask, [hull_b], -1, 255, -1)
+                brain_mask = cv2.erode(brain_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
+
+            g_f = cv2.bilateralFilter(g_ch, 7, 25, 25).astype(np.float64)
+            r_f = cv2.bilateralFilter(r_ch, 7, 25, 25).astype(np.float64)
+            is_multimodal = float(np.std(g_f - r_f)) > 2.5
+            psi = (g_f - 0.80 * r_f) if is_multimodal else g_f
+
+            ys, xs = np.where(brain_mask > 0)
+            if len(xs) > 100:
+                cx_brain = float(np.mean(xs))
+                x_grid = np.arange(w_img)[None, :]
+                left_h = (brain_mask > 0) & (x_grid < cx_brain) & (gray > 25)
+                right_h = (brain_mask > 0) & (x_grid >= cx_brain) & (gray > 25)
+
+                p85_l = float(np.percentile(psi[left_h], 85)) if np.count_nonzero(left_h) > 50 else 0.0
+                p85_r = float(np.percentile(psi[right_h], 85)) if np.count_nonzero(right_h) > 50 else 0.0
+                healthy_ref = left_h if p85_l < p85_r else right_h
+                if np.count_nonzero(healthy_ref) < 50:
+                    healthy_ref = (brain_mask > 0) & (gray > 25)
+
+                mu_psi = float(np.mean(psi[healthy_ref]))
+                std_psi = max(4.0, float(np.std(psi[healthy_ref])))
+                mu_g = float(np.mean(g_f[healthy_ref]))
+                std_g = max(4.0, float(np.std(g_f[healthy_ref])))
+
+                cand = (
+                    (psi > mu_psi + 1.95 * std_psi)
+                    & (g_f > max(72.0, mu_g + 1.35 * std_g))
+                    & (brain_mask > 0)
+                    & (gray > 25)
+                ).astype(np.uint8) * 255
+                cand = cv2.morphologyEx(cand, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+                cand = cv2.morphologyEx(cand, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)))
+
+                contours, _ = cv2.findContours(cand, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+                valid_c = [c for c in contours if 45 < cv2.contourArea(c) < (w_img * h_img * 0.35)]
+                if valid_c:
+                    pts = max(valid_c, key=cv2.contourArea)
+                    pixel_area = float(cv2.contourArea(pts))
+                    mask_mat = np.zeros_like(gray)
+                    cv2.drawContours(mask_mat, [pts], -1, 255, -1)
+                    M = cv2.moments(pts)
+                    if M["m00"] > 0:
+                        centroid = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
 
         # Calculo dimensional fisico
         voxel_area = pixel_spacing_mm * pixel_spacing_mm

@@ -329,15 +329,21 @@ def render_clinical_workstation(
 
             pct_of_total = (local_vol_cm3 / total_vol_cm3 * 100.0) if total_vol_cm3 > 0 else 0.0
 
-            # Metricas cuantitativas comprobadas
+            # Metricas cuantitativas comprobadas con 4 cifras decimales
             diff_mm2 = cv_area - cur_area
             diff_pct = (diff_mm2 / cur_area * 100.0) if cur_area > 0 else 0.0
             abs_err_pct = abs(diff_pct)
+            accuracy_pct = max(0.0, 100.0 - abs_err_pct)
+            case_vol_err_pct = (abs(cad_vol_cm3 - total_vol_cm3) / total_vol_cm3 * 100.0) if total_vol_cm3 > 0 else 0.0
+            case_vol_acc_pct = max(0.0, 100.0 - case_vol_err_pct)
+
             iou_val = (dice_val / (2.0 - dice_val)) if (2.0 - dice_val) > 0 else 0.0
             dice_pct = dice_val * 100.0
+            border_err_pct = max(0.0, 100.0 - dice_pct)
             iou_pct = iou_val * 100.0
             fn_pct = (fn_val / cur_area * 100.0) if cur_area > 0 else 0.0
             fp_pct = (fp_val / cur_area * 100.0) if cur_area > 0 else 0.0
+            err_color = "#047857" if abs_err_pct <= 5.0 else "#B45309" if abs_err_pct <= 10.0 else "#B91C1C"
 
             n_gt_pts = len(c_pts) if c_pts else 0
             n_cv_pts = len(cv_pts) if cv_pts else 0
@@ -380,7 +386,7 @@ def render_clinical_workstation(
                 <span style="color: #2563EB;">V_corte(GT) = {local_vol_cm3:.4f}</span> &nbsp;|&nbsp; <span style="color: #059669;">V_corte(IA) = {local_cad_vol_cm3:.4f} cm³</span>
             </div>
             <div style="font-size: 0.72rem; color: #64748B;">
-                Volumen 3D Simpson 1/3: GT = {total_vol_cm3:.4f} cm³ vs Spline IA = {cad_vol_cm3:.4f} cm³
+                Volumen 3D Caso (Simpson 1/3): GT = {total_vol_cm3:.4f} cm³ vs IA = {cad_vol_cm3:.4f} cm³ (Error Caso: <strong>{case_vol_err_pct:.4f}%</strong>)
             </div>
         </div>
     </div>
@@ -392,22 +398,22 @@ def render_clinical_workstation(
             <div style="font-size: 0.72rem; color: #475569; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">&Delta;A: <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">{diff_mm2:+.4f} mm² ({diff_pct:+.4f}%)</span></div>
         </div>
         <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
-            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">2. Particion Diferencial</div>
-            <div style="font-size: 0.76rem; color: #334155; margin-bottom: 2px;">Extra (FP): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #065F46;">{fp_val:.4f} mm² ({fp_pct:.4f}%)</span></div>
-            <div style="font-size: 0.76rem; color: #334155; margin-bottom: 2px;">Omitido (FN): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #B45309;">{fn_val:.4f} mm² ({fn_pct:.4f}%)</span></div>
-            <div style="font-size: 0.72rem; color: #64748B; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">FP - FN = {diff_mm2:+.4f} mm²</div>
+            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">2. Porcentaje de Error (IA vs GT)</div>
+            <div style="font-size: 0.76rem; color: #334155; margin-bottom: 2px;">Error Relativo Corte: <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: {err_color};">{abs_err_pct:.4f}%</span></div>
+            <div style="font-size: 0.76rem; color: #334155; margin-bottom: 2px;">Exactitud del Corte: <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A;">{accuracy_pct:.4f}%</span></div>
+            <div style="font-size: 0.72rem; color: #475569; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">Error Volumetrico Caso: <strong>{case_vol_err_pct:.4f}%</strong> (Exact: {case_vol_acc_pct:.4f}%)</div>
         </div>
         <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
-            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">3. Senal Fisica FLAIR (RMN)</div>
-            <div style="font-size: 0.76rem; color: #334155; margin-bottom: 2px;">Nucleo / Sano: <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">{f_core:.2f} / {f_healthy:.2f} u.i.</span></div>
-            <div style="font-size: 0.76rem; color: #065F46; margin-bottom: 2px;">Senal en FP (IA): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">{f_fp:.2f} u.i. (Brillante)</span></div>
-            <div style="font-size: 0.72rem; color: #64748B; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">Senal en FN (Excluido): {f_fn:.2f} u.i.</div>
+            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">3. Particion y Senal FLAIR</div>
+            <div style="font-size: 0.75rem; color: #334155; margin-bottom: 2px;">Extra (FP): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #065F46;">{fp_val:.4f} mm² ({fp_pct:.4f}%)</span></div>
+            <div style="font-size: 0.75rem; color: #334155; margin-bottom: 2px;">Omitido (FN): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #B45309;">{fn_val:.4f} mm² ({fn_pct:.4f}%)</span></div>
+            <div style="font-size: 0.71rem; color: #64748B; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">FLAIR Nucleo: {f_core:.1f} | FP: {f_fp:.1f} | Sano: {f_healthy:.1f} u.i.</div>
         </div>
         <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px;">
-            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">4. Coincidencia Espacial</div>
-            <div style="font-size: 0.76rem; color: #334155; margin-bottom: 2px;">Indice DICE (F1): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A;">{dice_pct:.4f}%</span></div>
-            <div style="font-size: 0.76rem; color: #334155; margin-bottom: 2px;">Indice Jaccard (IoU): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A;">{iou_pct:.4f}%</span></div>
-            <div style="font-size: 0.72rem; color: #047857; font-weight: 600; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">Aporte corte: {pct_of_total:.4f}% del total</div>
+            <div style="font-size: 0.70rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">4. Error de Borde y DICE</div>
+            <div style="font-size: 0.76rem; color: #334155; margin-bottom: 2px;">Error Espacial Borde: <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #1E40AF;">{border_err_pct:.4f}%</span></div>
+            <div style="font-size: 0.76rem; color: #334155; margin-bottom: 2px;">Precision DICE (F1): <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0F172A;">{dice_pct:.4f}%</span></div>
+            <div style="font-size: 0.72rem; color: #047857; font-weight: 600; border-top: 1px solid #E2E8F0; padding-top: 3px; margin-top: 3px;">Jaccard (IoU): {iou_pct:.4f}%</div>
         </div>
     </div>
     <div style="font-size: 0.75rem; color: #475569; padding-top: 6px; border-top: 1px solid #F1F5F9; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
