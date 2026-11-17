@@ -538,29 +538,17 @@ def create_3d_full_brain_visualization(
 
     # Camara optimizada para coincidir al 100% con la orientacion axial de la RMN 2D
     # (Anterior arriba, Posterior abajo, Izquierda derecha, Derecha izquierda)
-    cam_aligned_top = dict(eye=dict(x=0.0, y=0.001, z=1.95), up=dict(x=0.0, y=1.0, z=0.0))
+    cam_aligned_top = dict(eye=dict(x=0.0, y=0.001, z=2.40), up=dict(x=0.0, y=1.0, z=0.0))
     cam_perspective = dict(eye=dict(x=1.75, y=1.75, z=1.20), up=dict(x=0.0, y=0.0, z=1.0))
     initial_cam = cam_aligned_top if single_slice_idx is not None else cam_perspective
 
-    if single_slice_idx is not None:
-        z_ref = float(active_z) if active_z is not None else 0.0
-        scene_kwargs = dict(
-            xaxis=dict(title="X Sagital (mm)", range=[-118.0, 118.0], autorange=False, backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
-            yaxis=dict(title="Y Coronal (mm)", range=[-118.0, 118.0], autorange=False, backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
-            zaxis=dict(title="Z Axial (mm)", range=[z_ref - 35.0, z_ref + 35.0], autorange=False, backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
-            bgcolor=THEME_BG,
-            camera=initial_cam,
-            aspectmode="manual",
-            aspectratio=dict(x=1.0, y=1.0, z=0.35)
-        )
-    else:
-        scene_kwargs = dict(
-            xaxis=dict(title="X Sagital (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
-            yaxis=dict(title="Y Coronal (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
-            zaxis=dict(title="Z Axial (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
-            bgcolor=THEME_BG,
-            camera=initial_cam
-        )
+    scene_kwargs = dict(
+        xaxis=dict(title="X Sagital (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
+        yaxis=dict(title="Y Coronal (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
+        zaxis=dict(title="Z Axial (mm)", backgroundcolor="#FFFFFF", gridcolor=THEME_GRID, color=THEME_MUTED, zerolinecolor=THEME_GRID),
+        bgcolor=THEME_BG,
+        camera=initial_cam
+    )
 
     fig.update_layout(
         height=490,
@@ -838,6 +826,7 @@ def create_2d_slice_view(
             title="Eje Sagital X (mm)",
             range=x_range,
             autorange=False,
+            constrain="domain",
             gridcolor=THEME_GRID,
             zeroline=False,
             color=THEME_MUTED,
@@ -847,6 +836,9 @@ def create_2d_slice_view(
             title="Eje Coronal Y (mm)",
             range=y_range,
             autorange=False,
+            scaleanchor="x",
+            scaleratio=1,
+            constrain="domain",
             gridcolor=THEME_GRID,
             zeroline=False,
             color=THEME_MUTED,
@@ -862,7 +854,7 @@ def create_2d_slice_view(
         ),
         margin=dict(l=40, r=20, t=52, b=55),
         paper_bgcolor=THEME_BG,
-        plot_bgcolor="#0B0F19",
+        plot_bgcolor=THEME_BG,
         font=dict(family="Inter, sans-serif", color=THEME_TEXT)
     )
 
